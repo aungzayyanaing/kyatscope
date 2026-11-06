@@ -881,7 +881,10 @@ function renderStocks(){
   if (nx) nx.addEventListener("click", function(){ STOCK.page++; renderStocks(); stockRefreshVisible(); });
   renderStocks();
   stockStatus();
-  setTimeout(stockSweep, 800);
+  /* The stock sweep waits 5s so the FX checks get the first shot
+     at the shared relay budget — the first page is served from
+     cache in the meantime, so nothing looks empty. */
+  setTimeout(stockSweep, 5000);
 })();
 
 /* ---------- Lightweight Charts (TradingView) — selected asset ----------
@@ -1130,7 +1133,7 @@ function refreshAll(){
    changed, the embedded rates stay exactly as they are and the page
    keeps working. Nothing is stored: the check runs fresh each visit. */
 var MARKET_PAGES = { USD:"usd-to-mmk", THB:"thb-to-mmk", CNY:"cny-to-mmk", JPY:"jpy-to-mmk", KRW:"krw-to-mmk", VND:"vnd-to-mmk", EUR:"eur-to-mmk" };
-var marketBusy = false, lastMarketCheck = 0;
+var marketBusy = false, lastMarketCheck = 0, marketRetries = 0;
 /* Per-source rate freshness: the snapshot's day, and the newest day
    any live source has published. A currency's market/bank rate is
    only "today's" once its own source has stamped it with that day —

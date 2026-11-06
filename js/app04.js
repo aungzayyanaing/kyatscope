@@ -100,8 +100,13 @@ function checkMarketUpdate(){
     /* A sweep in which every relay failed must not burn the
        5-minute throttle: clear the stamp so the next tab-visible
        or interval check retries immediately instead of leaving
-       the page on a stale snapshot for the rest of the guard. */
-    if (!anyOk) lastMarketCheck = 0;
+       the page on a stale snapshot for the rest of the guard.
+       And retry on a timer too (20s, up to 3 times): a failed
+       load must not sit stale until the user switches tabs. */
+    if (!anyOk){
+      lastMarketCheck = 0;
+      if (marketRetries < 3){ marketRetries++; setTimeout(checkMarketUpdate, 20000); }
+    } else marketRetries = 0;
     if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
     if (applied) refreshAll();
     if (status){
@@ -131,7 +136,7 @@ function checkMarketUpdate(){
    stored history points, and one refresh moves cards, converter,
    table, ticker and chart together. Silent on failure: the rates
    already on screen stay exactly as they are. */
-var aggBusy = false, lastAggCheck = 0;
+var aggBusy = false, lastAggCheck = 0, aggRetries = 0;
 /* Stale-first-paint guard: until the first live FX sweep settles
    (success or failure), the converter must not show the baked
    2026-10-30 snapshot rate as if it were today's rate. */
@@ -232,7 +237,17 @@ function checkAggregateUpdate(){
   firstAggregate(urls).then(function(res){
     aggBusy = false;
     fxFirstSettled = true;
-    if (!res){ lastAggCheck = 0; return; }
+    if (!res){
+      lastAggCheck = 0;
+      /* A failed aggregate must not wait 30 minutes for the next
+         interval check: jina 429s are transient and its budget
+         refills, so retry after 20s, up to 3 times. (Verified live
+         2026-11-06: 2 of 3 fresh loads stayed on the snapshot rate
+         because the aggregate failed once and never retried.) */
+      if (aggRetries < 3){ aggRetries++; setTimeout(checkAggregateUpdate, 20000); }
+      return;
+    }
+    aggRetries = 0;
     var won = relayOrder[res.relay];
     relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
     var dayId = res.data.dayId, changed = false;
@@ -257,7 +272,10 @@ function checkAggregateUpdate(){
     });
     if (dayId && dayId > AS_OF.replace(/-/g, "")) setAsOf(isoOfDayId(dayId));
     if (changed) refreshAll();
-  }).catch(function(){ aggBusy = false; fxFirstSettled = true; });
+  }).catch(function(){
+    aggBusy = false; fxFirstSettled = true;
+    if (aggRetries < 3){ aggRetries++; setTimeout(checkAggregateUpdate, 20000); }
+  });
 }
 
 /* Last-resort guard: the update checks handle every failure

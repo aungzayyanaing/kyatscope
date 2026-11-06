@@ -430,10 +430,15 @@ function renderConverter(){
      converter must not show a rate the sweep has not confirmed for
      today — neither the baked snapshot before the first sweep
      settles, nor a snapshot rate after the aggregate has already
-     advanced the page date (the aggregate never updates the core
-     pairs' market rates). Once the sweep settles with no new day,
-     the snapshot renders with its own date as the honest fallback. */
+     advanced the page date. Once the sweep settles with no new day,
+     the snapshot renders with its own date as the honest fallback.
+     The date printed next to the rate is this currency's OWN
+     rate-day (srcDay), never the page-global AS_OF: the aggregate
+     advances AS_OF when ANY currency reports today, so a currency
+     whose own refresh failed would otherwise print today's date
+     next to yesterday's rate. */
   var srcDay = (mode === "market" ? c.mDay : c.bDay) || SNAP_DAY;
+  var srcDate = isoOfDayId(srcDay);
   if ((!fxFirstSettled || srcDay < LATEST_DAY) && (marketBusy || aggBusy)){
     var box0 = document.getElementById("convResult");
     if (box0) box0.innerHTML = '<div class="r-main">ဈေးအသစ် တောင်းနေသည်…</div><div class="r-sub">ယနေ့ ဈေးကို အတည်ပြုနေပါသည် — ခဏစောင့်ပါ</div>';
@@ -465,12 +470,12 @@ function renderConverter(){
     document.getElementById("convAmtLabel").textContent = "ပမာဏ (" + c.code + ")";
     var mmk = amt / c.unit * rate;
     box.innerHTML = '<div class="r-main"><span class="num">' + fmt(amt) + '</span> ' + c.code + ' = <span class="num gold" id="convMain">' + fmt(mmk) + '</span> ကျပ်</div>' +
-      '<div class="r-sub">' + modeWord + ' · ' + sideWord + ' — ' + unitNote(c) + ' <span class="num">' + fmtFx(rate, c.code) + '</span> ကျပ် · ' + AS_OF + '</div>' + chgHtml + perUnit;
+      '<div class="r-sub">' + modeWord + ' · ' + sideWord + ' — ' + unitNote(c) + ' <span class="num">' + fmtFx(rate, c.code) + '</span> ကျပ် · ' + srcDate + '</div>' + chgHtml + perUnit;
   } else {
     document.getElementById("convAmtLabel").textContent = "ပမာဏ (ကျပ် MMK)";
     var fx = amt / rate * c.unit;
     box.innerHTML = '<div class="r-main"><span class="num">' + fmt(amt) + '</span> ကျပ် = <span class="num gold" id="convMain">' + fmt(fx) + '</span> ' + c.code + '</div>' +
-      '<div class="r-sub">' + modeWord + ' · ' + sideWord + ' — ' + unitNote(c) + ' <span class="num">' + fmtFx(rate, c.code) + '</span> ကျပ် · ' + AS_OF + '</div>' + chgHtml + perUnit;
+      '<div class="r-sub">' + modeWord + ' · ' + sideWord + ' — ' + unitNote(c) + ' <span class="num">' + fmtFx(rate, c.code) + '</span> ကျပ် · ' + srcDate + '</div>' + chgHtml + perUnit;
   }
   var cm = document.getElementById("convMain");
   if (cm){
