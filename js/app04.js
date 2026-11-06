@@ -91,6 +91,28 @@ function applyMarketRate(c, r, baseDay){
 }
 function isoOfDayId(d){ return d.slice(0,4) + "-" + d.slice(4,6) + "-" + d.slice(6,8); }
 
+/* The header status must never claim a fresh rate while the
+   currency on screen is still stale: AS_OF advances when ANY pair
+   reports today, so a partial sweep (THB fresh, USD stale) used to
+   announce "ဈေးအသစ် ရပါပြီ" next to a 2026-10-30 USD rate (seen
+   live 3 times). Now it says "some prices fresh" until the
+   selected currency itself is current. */
+function setFxStatus(applied, anyOk){
+  var status = document.getElementById("updateStatus");
+  if (!status) return;
+  var nowT = new Date();
+  var p2 = function(n){ return ("0" + n).slice(-2); };
+  var stamp = " · နောက်ဆုံးအပ်ဒိတ် " + p2(nowT.getHours()) + ":" + p2(nowT.getMinutes());
+  if (applied){
+    var selC = byCode(selected);
+    var selFresh = selC && selC.mDay && selC.mDay >= LATEST_DAY;
+    status.textContent = selFresh
+      ? "ဈေးအသစ် ရပါပြီ — " + AS_OF + stamp
+      : "ဈေးအချို့ အသစ်ရပါပြီ — ရွေးထားသော ငွေကြေး၏ ဈေးအသစ် တောင်းနေသည်…" + stamp;
+  } else if (anyOk) status.textContent = "နောက်ဆုံးဈေး ဖြစ်နေပါပြီ။" + stamp;
+  else status.textContent = "နောက်ဆုံးအပ်ဒိတ် — " + AS_OF + " (အသစ် တောင်းမရသေးပါ — မှတ်တမ်း ဈေးကို ပြထားသည်)";
+}
+
 /* Retry just the pairs that failed (a partial sweep success must
    not leave the headline pair stale until the 30-minute interval:
    verified live 2026-11-06 — USD failed first in the boot burst
@@ -118,7 +140,7 @@ function retryMarketPairs(list, attempt){
   });
   chain.then(function(){
     if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
-    if (applied) refreshAll();
+    if (applied){ refreshAll(); setFxStatus(true, true); }
     if (still.length > 0 && attempt < 3){
       setTimeout(function(){ retryMarketPairs(still, attempt + 1); }, 20000);
     }
@@ -190,14 +212,7 @@ function checkMarketUpdate(){
     }
     if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
     if (applied) refreshAll();
-    if (status){
-      var nowT = new Date();
-      var p2 = function(n){ return ("0" + n).slice(-2); };
-      var stamp = " · နောက်ဆုံးအပ်ဒိတ် " + p2(nowT.getHours()) + ":" + p2(nowT.getMinutes());
-      if (applied) status.textContent = "ဈေးအသစ် ရပါပြီ — " + AS_OF + stamp;
-      else if (anyOk) status.textContent = "နောက်ဆုံးဈေး ဖြစ်နေပါပြီ။" + stamp;
-      else status.textContent = "နောက်ဆုံးအပ်ဒိတ် — " + AS_OF + " (အသစ် တောင်းမရသေးပါ — မှတ်တမ်း ဈေးကို ပြထားသည်)";
-    }
+    setFxStatus(applied, anyOk);
   }).catch(function(){
     /* Silent by design: a failed check keeps the rates already on
        screen, clears the busy guard so the next scheduled check can
@@ -418,7 +433,7 @@ function checkAggregateUpdate(){
       } catch (err) { /* one bad row never breaks the whole sweep */ }
     });
     if (dayId && dayId > AS_OF.replace(/-/g, "")) setAsOf(isoOfDayId(dayId));
-    if (changed) refreshAll();
+    if (changed){ refreshAll(); setFxStatus(true, true); }
   }).catch(function(){
     aggBusy = false; fxFirstSettled = true;
     if (aggRetries < 3){ aggRetries++; setTimeout(checkAggregateUpdate, 20000); }
