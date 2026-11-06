@@ -426,20 +426,29 @@ convSel.value = selected;
 
 function renderConverter(){
   var c = byCode(convSel.value);
-  /* Stale first paint: while a live FX sweep is still in flight, the
-     converter must not show a rate the sweep has not confirmed for
-     today — neither the baked snapshot before the first sweep
-     settles, nor a snapshot rate after the aggregate has already
-     advanced the page date. Once the sweep settles with no new day,
-     the snapshot renders with its own date as the honest fallback.
-     The date printed next to the rate is this currency's OWN
-     rate-day (srcDay), never the page-global AS_OF: the aggregate
-     advances AS_OF when ANY currency reports today, so a currency
-     whose own refresh failed would otherwise print today's date
-     next to yesterday's rate. */
+  /* Stale first paint: before any check has settled, the converter
+     shows the loading note, never the baked snapshot. Once this
+     currency has been attempted, the rate renders — fresh, or stale
+     with its own honest date (see srcDate below). The date printed
+     next to the rate is this currency's OWN rate-day, never the
+     page-global AS_OF: the aggregate advances AS_OF when ANY
+     currency reports today, so a currency whose own refresh failed
+     would otherwise print today's date next to yesterday's rate. */
   var srcDay = (mode === "market" ? c.mDay : c.bDay) || SNAP_DAY;
   var srcDate = isoOfDayId(srcDay);
-  if ((!fxFirstSettled || srcDay < LATEST_DAY) && (marketBusy || aggBusy)){
+  /* The loading note shows ONLY while THIS currency has not been
+     attempted yet and a check is still in flight. The old gate
+     waited for the whole market sweep to finish (minutes — 7
+     sequential pairs, each burning relay timeouts), so a fresh USD
+     rate from the aggregate sat hidden behind the other pairs'
+     fetches, and one failed USD fetch held the converter hostage
+     until the sweep ended. Now: once this currency's own fetch
+     resolves — fresh or failed — the converter renders (fresh, or
+     stale with its honest date), and a background retry upgrades
+     it. Before any check has settled, the note shows so the first
+     paint never flashes a stale rate. */
+  var tried = mode === "market" ? (aggOk || c.mTried) : aggOk;
+  if (!tried && (marketBusy || aggBusy || !fxFirstSettled)){
     var box0 = document.getElementById("convResult");
     if (box0) box0.innerHTML = '<div class="r-main">ဈေးအသစ် တောင်းနေသည်…</div><div class="r-sub">ယနေ့ ဈေးကို အတည်ပြုနေပါသည် — ခဏစောင့်ပါ</div>';
     return;
@@ -1427,28 +1436,4 @@ function upbitPoll(){
       });
       upbitFeed();
     }).catch(function(){});
-}
-function upbitSocket(){
-  if (!("WebSocket" in window)) return;
-  var ws;
-  try { ws = new WebSocket("wss://api.upbit.com/websocket/v1"); } catch (e) { return; }
-  ws.onopen = function(){
-    try { ws.send(JSON.stringify([{ ticket:"kyatscope-krw" }, { type:"ticker", codes:["KRW-BTC", "KRW-USDT"] }])); } catch (e) {}
-  };
-  ws.onmessage = function(ev){
-    function handle(txt){
-      try {
-        var t = JSON.parse(txt); if (!t || !t.code) return;
-        var p = parseFloat(t.trade_price); if (!(p > 0)) return;
-        if (t.code === "KRW-BTC") UPBIT.btc = p;
-        else if (t.code === "KRW-USDT") UPBIT.usdt = p;
-        else return;
-        upbitFeed();
-      } catch (e) {}
-    }
-    if (ev.data && typeof ev.data.text === "function") ev.data.text().then(handle).catch(function(){});
-    else if (typeof ev.data === "string") handle(ev.data);
-  };
-  ws.onclose = function(){ setTimeout(upbitSocket, 20000); };
-  ws.onerror = function(){ try { ws.close(); } catch (e) {} };
 }

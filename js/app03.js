@@ -1,3 +1,27 @@
+function upbitSocket(){
+  if (!("WebSocket" in window)) return;
+  var ws;
+  try { ws = new WebSocket("wss://api.upbit.com/websocket/v1"); } catch (e) { return; }
+  ws.onopen = function(){
+    try { ws.send(JSON.stringify([{ ticket:"kyatscope-krw" }, { type:"ticker", codes:["KRW-BTC", "KRW-USDT"] }])); } catch (e) {}
+  };
+  ws.onmessage = function(ev){
+    function handle(txt){
+      try {
+        var t = JSON.parse(txt); if (!t || !t.code) return;
+        var p = parseFloat(t.trade_price); if (!(p > 0)) return;
+        if (t.code === "KRW-BTC") UPBIT.btc = p;
+        else if (t.code === "KRW-USDT") UPBIT.usdt = p;
+        else return;
+        upbitFeed();
+      } catch (e) {}
+    }
+    if (ev.data && typeof ev.data.text === "function") ev.data.text().then(handle).catch(function(){});
+    else if (typeof ev.data === "string") handle(ev.data);
+  };
+  ws.onclose = function(){ setTimeout(upbitSocket, 20000); };
+  ws.onerror = function(){ try { ws.close(); } catch (e) {} };
+}
 function fastUpbitPoll(){ if (selected === "KRW") upbitPoll(); }
 setTimeout(upbitPoll, 1500);
 setInterval(upbitPoll, 20000);
@@ -1290,35 +1314,4 @@ function parseRenderedRate(text){
   }
   return { dayId: dayId, buy: buy, sell: sell,
            chg: chg, pct: round2(pct) };
-}
-function parseMarketRate(html){
-  if (!html || html.length < 200) return null;
-  var doc = html;
-  /* one relay wraps the page as JSON: {"contents": "<raw page>"} —
-     unwrap it so the same visible-block rule applies inside */
-  if (doc.indexOf('"contents"') !== -1){
-    try {
-      var wrapped = JSON.parse(doc).contents;
-      if (typeof wrapped === "string" && wrapped.length >= 200) doc = wrapped;
-    } catch (e) {}
-  }
-  var visible = parseRenderedRate(doc);
-  var embedded = parseEmbeddedJsonRate(doc);
-  if (visible){
-    if (embedded && !ratesMatch(embedded, visible)){
-      /* embedded JSON disagrees with the visible Buy/Sell block
-         (e.g. USD/MMK JSON 4,783.33 / 4,735.50 vs visible
-         4,776.66 / 4,728.89): discard the JSON, keep the visible */
-      return visible;
-    }
-    /* no embedded JSON, or it matches the visible block: verified */
-    return visible;
-  }
-  /* No visible block in this response (the page is JS-rendered, so a
-     raw-HTML fetch carries no rendered Buy/Sell block): the embedded
-     JSON is the page's own data — accept it. Its dayId is still
-     checked by the caller, and the sanity band in
-     parseEmbeddedJsonRate applies. Refusing it here once left the
-     page on a stale snapshot for a whole day. */
-  return embedded;
 }

@@ -1,3 +1,34 @@
+function parseMarketRate(html){
+  if (!html || html.length < 200) return null;
+  var doc = html;
+  /* one relay wraps the page as JSON: {"contents": "<raw page>"} —
+     unwrap it so the same visible-block rule applies inside */
+  if (doc.indexOf('"contents"') !== -1){
+    try {
+      var wrapped = JSON.parse(doc).contents;
+      if (typeof wrapped === "string" && wrapped.length >= 200) doc = wrapped;
+    } catch (e) {}
+  }
+  var visible = parseRenderedRate(doc);
+  var embedded = parseEmbeddedJsonRate(doc);
+  if (visible){
+    if (embedded && !ratesMatch(embedded, visible)){
+      /* embedded JSON disagrees with the visible Buy/Sell block
+         (e.g. USD/MMK JSON 4,783.33 / 4,735.50 vs visible
+         4,776.66 / 4,728.89): discard the JSON, keep the visible */
+      return visible;
+    }
+    /* no embedded JSON, or it matches the visible block: verified */
+    return visible;
+  }
+  /* No visible block in this response (the page is JS-rendered, so a
+     raw-HTML fetch carries no rendered Buy/Sell block): the embedded
+     JSON is the page's own data — accept it. Its dayId is still
+     checked by the caller, and the sanity band in
+     parseEmbeddedJsonRate applies. Refusing it here once left the
+     page on a stale snapshot for a whole day. */
+  return embedded;
+}
 function parseAnyRate(text){
   if (!text) return null;
   return parseMarketRate(text);
@@ -84,6 +115,10 @@ function checkMarketUpdate(){
     chain = chain.then(function(){
       if (!MARKET_PAGES[c.code]) return;
       return fetchPairRate(c).then(function(r){
+        /* This currency's market rate has now been attempted
+           (fresh or not) — the converter's per-currency gate
+           below can stop waiting on it. */
+        c.mTried = true;
         try {
           if (!r) return;
           if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2) return;
@@ -136,7 +171,7 @@ function checkMarketUpdate(){
    stored history points, and one refresh moves cards, converter,
    table, ticker and chart together. Silent on failure: the rates
    already on screen stay exactly as they are. */
-var aggBusy = false, lastAggCheck = 0, aggRetries = 0;
+var aggBusy = false, lastAggCheck = 0, aggRetries = 0, aggOk = false;
 /* Stale-first-paint guard: until the first live FX sweep settles
    (success or failure), the converter must not show the baked
    2026-10-30 snapshot rate as if it were today's rate. */
@@ -248,6 +283,11 @@ function checkAggregateUpdate(){
       return;
     }
     aggRetries = 0;
+    /* The aggregate is the one-shot source for every currency's
+       rates: once it has succeeded, every currency it covered has
+       been tried (fresh or not) — the converter no longer has to
+       wait for the slow per-pair sweep to say so. */
+    aggOk = true;
     var won = relayOrder[res.relay];
     relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
     var dayId = res.data.dayId, changed = false;
