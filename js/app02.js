@@ -426,9 +426,15 @@ convSel.value = selected;
 
 function renderConverter(){
   var c = byCode(convSel.value);
-  /* Stale first paint: while the first live FX sweep is still in
-     flight, show a loading note instead of the baked snapshot rate. */
-  if (!fxFirstSettled && (marketBusy || aggBusy)){
+  /* Stale first paint: while a live FX sweep is still in flight, the
+     converter must not show a rate the sweep has not confirmed for
+     today — neither the baked snapshot before the first sweep
+     settles, nor a snapshot rate after the aggregate has already
+     advanced the page date (the aggregate never updates the core
+     pairs' market rates). Once the sweep settles with no new day,
+     the snapshot renders with its own date as the honest fallback. */
+  var srcDay = (mode === "market" ? c.mDay : c.bDay) || SNAP_DAY;
+  if ((!fxFirstSettled || srcDay < LATEST_DAY) && (marketBusy || aggBusy)){
     var box0 = document.getElementById("convResult");
     if (box0) box0.innerHTML = '<div class="r-main">ဈေးအသစ် တောင်းနေသည်…</div><div class="r-sub">ယနေ့ ဈေးကို အတည်ပြုနေပါသည် — ခဏစောင့်ပါ</div>';
     return;
@@ -1441,8 +1447,3 @@ function upbitSocket(){
   ws.onclose = function(){ setTimeout(upbitSocket, 20000); };
   ws.onerror = function(){ try { ws.close(); } catch (e) {} };
 }
-function fastUpbitPoll(){ if (selected === "KRW") upbitPoll(); }
-setTimeout(upbitPoll, 1500);
-setInterval(upbitPoll, 20000);
-setTimeout(upbitSocket, 1800);
-setInterval(fastUpbitPoll, 3000);

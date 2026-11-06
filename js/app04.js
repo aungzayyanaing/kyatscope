@@ -54,6 +54,11 @@ function applyAggSource(c, srcName, s, dayId){
   if (!(buy > 0) || !(sell > 0)) return false;
   var cur = c[srcName];
   if (cur && (buy < cur.buy * 0.5 || buy > cur.buy * 2)) return false;
+  /* Stamp this source's day even when the values are unchanged. */
+  if (dayId){
+    c[srcName === "market" ? "mDay" : "bDay"] = dayId;
+    if (dayId > LATEST_DAY) LATEST_DAY = dayId;
+  }
   var chg = parseFloat(s.change) || 0;
   var pct = round2((parseFloat(s.changePercent) || 0) * 100);
   var changed = false;

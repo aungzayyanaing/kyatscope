@@ -1,3 +1,8 @@
+function fastUpbitPoll(){ if (selected === "KRW") upbitPoll(); }
+setTimeout(upbitPoll, 1500);
+setInterval(upbitPoll, 20000);
+setTimeout(upbitSocket, 1800);
+setInterval(fastUpbitPoll, 3000);
 document.addEventListener("visibilitychange", function(){ if (!document.hidden) upbitPoll(); });
 /* Seed KRW's LIVE candles from real 1-minute candles: Upbit's
    KRW-BTC minutes crossed with Binance's BTCUSDT minutes,
@@ -904,6 +909,16 @@ function lwSetSeries(){
   if (lb) lb.setAttribute("aria-pressed", LW.seriesKind === "line" ? "true" : "false");
   if (cb) cb.setAttribute("aria-pressed", LW.seriesKind === "candle" ? "true" : "false");
 }
+/* Caption under the selected-item chart: must follow the Line/Candle
+   mode switch, not just the first load (switching mode used to leave
+   the "Line ဂရပ်" caption under a candle chart). */
+function lwSetCaption(){
+  var st = document.getElementById("lwStatus");
+  if (!st || !LW.asset) return;
+  st.textContent = LW.seriesKind === "candle"
+    ? "Candle ဂရပ် — ၁ နာရီ တစ်တုံး · Binance (crypto) / Yahoo (စတော့) မှတ်တမ်း"
+    : "Line ဂရပ် — ပိတ်ဈေး မှတ်တမ်း" + (LW.asset.kind === "fx" ? " · နေ့စဉ် ပိတ်ဈေးများ" : "");
+}
 function lwDayIdToISO(d){
   return d.slice(0, 4) + "-" + d.slice(4, 6) + "-" + d.slice(6, 8);
 }
@@ -976,11 +991,7 @@ function lwShow(asset){
       }
       if (LW.mode === "candle" && !(LW.candleData && LW.candleData.length)) LW.mode = "line";
       lwSetSeries();
-      if (st){
-        st.textContent = LW.seriesKind === "candle"
-          ? "Candle ဂရပ် — ၁ နာရီ တစ်တုံး · Binance (crypto) / Yahoo (စတော့) မှတ်တမ်း"
-          : "Line ဂရပ် — ပိတ်ဈေး မှတ်တမ်း" + (asset.kind === "fx" ? " · နေ့စဉ် ပိတ်ဈေးများ" : "");
-      }
+      lwSetCaption();
     });
   });
 }
@@ -990,7 +1001,7 @@ function lwShow(asset){
   var lb = document.getElementById("lwLine"), cb = document.getElementById("lwCandle");
   function lwSwitchMode(m){
     LW.mode = m;
-    if (LW.asset && (LW.lineData || LW.candleData)){ lwSetSeries(); return; }
+    if (LW.asset && (LW.lineData || LW.candleData)){ lwSetSeries(); lwSetCaption(); return; }
     if (LW.asset) lwShow(LW.asset);
     else lwSetSeries();
   }
@@ -1040,6 +1051,13 @@ function refreshAll(){
    keeps working. Nothing is stored: the check runs fresh each visit. */
 var MARKET_PAGES = { USD:"usd-to-mmk", THB:"thb-to-mmk", CNY:"cny-to-mmk", JPY:"jpy-to-mmk", KRW:"krw-to-mmk", VND:"vnd-to-mmk", EUR:"eur-to-mmk" };
 var marketBusy = false, lastMarketCheck = 0;
+/* Per-source rate freshness: the snapshot's day, and the newest day
+   any live source has published. A currency's market/bank rate is
+   only "today's" once its own source has stamped it with that day —
+   the global AS_OF advances from the aggregate alone, which never
+   updates the core pairs' market rates, so AS_OF alone must not
+   certify a converter rate as current. */
+var SNAP_DAY = AS_OF.replace(/-/g, ""), LATEST_DAY = SNAP_DAY;
 var relayOrder = [0, 1, 2, 3];
 
 function round2(n){ return Math.round(n * 100) / 100; }
@@ -1257,6 +1275,10 @@ function fetchPairRate(c){
 }
 function applyMarketRate(c, r, baseDay){
   if (r.dayId < baseDay) return false;
+  /* The source published on r.dayId: stamp it even when the values
+     are unchanged, so the converter can tell this rate is current. */
+  c.mDay = r.dayId;
+  if (r.dayId > LATEST_DAY) LATEST_DAY = r.dayId;
   var m = c.market;
   /* sanity band: a real daily move never halves or doubles the rate;
      anything outside is a corrupted read (e.g. a bank value), skip it */
@@ -1287,7 +1309,16 @@ function checkMarketUpdate(){
   var baseDay = AS_OF.replace(/-/g, "");
   var applied = false, anyOk = false, newestDay = baseDay;
   var chain = Promise.resolve();
-  DATA.forEach(function(c){
+  /* The selected currency (and the other core pairs) go first: their
+     rates are the ones on screen, so they must refresh in seconds,
+     not after the whole 100+ currency sweep. */
+  var order = [], seenM = {};
+  [selected].concat(Object.keys(CORE7)).forEach(function(code){
+    var cc = byCode(code);
+    if (cc && !seenM[cc.code]){ seenM[cc.code] = 1; order.push(cc); }
+  });
+  DATA.forEach(function(c){ if (!seenM[c.code]) order.push(c); });
+  order.forEach(function(c){
     chain = chain.then(function(){
       if (!MARKET_PAGES[c.code]) return;
       return fetchPairRate(c).then(function(r){
