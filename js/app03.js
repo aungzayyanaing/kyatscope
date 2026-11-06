@@ -905,10 +905,12 @@ function renderStocks(){
   if (nx) nx.addEventListener("click", function(){ STOCK.page++; renderStocks(); stockRefreshVisible(); });
   renderStocks();
   stockStatus();
-  /* The stock sweep waits 5s so the FX checks get the first shot
-     at the shared relay budget — the first page is served from
-     cache in the meantime, so nothing looks empty. */
-  setTimeout(stockSweep, 5000);
+  /* The stock sweep waits 30s so the FX checks get a clean first
+     shot at the shared jina budget: 12 spark batches firing at
+     once 429 the relay and starve the one aggregate request the
+     converter needs. The first page is served from cache in the
+     meantime, so nothing looks empty. */
+  setTimeout(stockSweep, 30000);
 })();
 
 /* ---------- Lightweight Charts (TradingView) — selected asset ----------
@@ -1203,6 +1205,30 @@ function fetchText(url, ms, outerSignal){
     .then(function(r){ if (!r.ok) throw new Error("bad"); return r.text(); })
     .then(function(t){ if (timer) clearTimeout(timer); return t; })
     .catch(function(){ if (timer) clearTimeout(timer); return null; });
+}
+/* EG Currency fetches: jina is the ONLY relay that works for EG
+   (allorigins + codetabs 522, verified repeatedly 2026-11-06), so
+   the old 4-relay parallel fan-out just burned ~20s per failed
+   round waiting on dead relays — and the checks only settled null
+   after ALL four had failed. Sequential chain instead: jina (12s)
+   then one short allorigins-raw attempt (5s). A jina 429 fails
+   fast (~1s, fetchText resolves null) and the check settles in
+   seconds, so the 20s retry timers can actually refill and
+   succeed. parseFn turns fetched text into a result or null. */
+function egFetchChain(url, parseFn){
+  var all = relayUrls(url);
+  var attempts = [[all[3], 12000], [all[0], 5000]];
+  var chain = Promise.resolve(null);
+  attempts.forEach(function(pair){
+    chain = chain.then(function(got){
+      if (got) return got;
+      return fetchText(pair[0], pair[1]).then(function(t){
+        if (!t) return null;
+        try { return parseFn(t); } catch (e) { return null; }
+      }).catch(function(){ return null; });
+    });
+  });
+  return chain;
 }
 /* ----- Rate parsing: the visible Buy/Sell block is the truth -----
    The market page carries two different numbers for the same day:

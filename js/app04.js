@@ -57,13 +57,11 @@ function firstParsed(urls){
   });
 }
 function fetchPairRate(c){
-  var all = relayUrls(marketPageUrl(MARKET_PAGES[c.code]));
-  var urls = relayOrder.map(function(i){ return all[i]; });
-  return firstParsed(urls).then(function(res){
-    if (!res) return null;
-    var won = relayOrder[res.relay];
-    relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
-    return res.rate;
+  /* Sequential jina-first chain (see egFetchChain): the old
+     4-relay parallel fan-out burned ~20s per failed round on
+     dead relays and delayed this currency's tried stamp. */
+  return egFetchChain(marketPageUrl(MARKET_PAGES[c.code]), function(t){
+    try { return parseAnyRate(t); } catch (e) { return null; }
   }).catch(function(){ return null; });
 }
 function applyMarketRate(c, r, baseDay){
@@ -328,12 +326,22 @@ function checkAggregateUpdate(){
   var now = Date.now();
   if (lastAggCheck && now - lastAggCheck < 5 * 60 * 1000) return;
   aggBusy = true; lastAggCheck = now;
-  var all = relayUrls("https://egcurrency.com/en/currency/mmk");
-  var urls = relayOrder.map(function(i){ return all[i]; });
-  firstAggregate(urls).then(function(res){
+  /* Sequential jina-first chain (see egFetchChain): one jina
+     request carries the whole table via parseAggMarkdown, so a
+     single success refreshes all 24 currencies at once. The JSON
+     path needs a full list (>50); the markdown path self-guards
+     (>=20 entries and USD present). */
+  egFetchChain("https://egcurrency.com/en/currency/mmk", function(t){
+    var r = null;
+    try { r = extractCurrenciesJson(t); } catch (e) { r = null; }
+    if (r && r.list && r.list.length > 50) return r;
+    try { r = parseAggMarkdown(t); } catch (e) { r = null; }
+    if (r) return r;
+    return null;
+  }).then(function(data){
     aggBusy = false;
     fxFirstSettled = true;
-    if (!res){
+    if (!data){
       lastAggCheck = 0;
       /* A failed aggregate must not wait 30 minutes for the next
          interval check: jina 429s are transient and its budget
@@ -349,10 +357,8 @@ function checkAggregateUpdate(){
        been tried (fresh or not) — the converter no longer has to
        wait for the slow per-pair sweep to say so. */
     aggOk = true;
-    var won = relayOrder[res.relay];
-    relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
-    var dayId = res.data.dayId, changed = false;
-    res.data.list.forEach(function(e){
+    var dayId = data.dayId, changed = false;
+    data.list.forEach(function(e){
       try {
         if (!e || !e.code) return;
         var c = byCode(e.code);
