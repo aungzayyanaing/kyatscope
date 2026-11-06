@@ -216,7 +216,16 @@ function checkAggregateUpdate(){
         if (!c || c.code !== e.code) return;
         var srcs = e.sources || {};
         if (applyAggSource(c, "bank", srcs.bank, dayId)) changed = true;
-        if (!CORE7[c.code] && applyAggSource(c, "market", srcs.market, dayId)) changed = true;
+        /* The aggregate page carries EVERY currency's market rate in
+           its embedded JSON (verified 2026-11-06: USD 4912.66, THB
+           146.69, EUR 5458.51, …) — the core pairs used to be excluded
+           here so their market rates came only from the slow
+           per-pair visible-block sweep, but that sweep depends on
+           jina alone (allorigins/codetabs 522 for EG Currency) and
+           jina 429s when the page hammers it, so USD sat on its
+           snapshot rate for minutes while the page date already read
+           today. One aggregate request now refreshes them all. */
+        if (applyAggSource(c, "market", srcs.market, dayId)) changed = true;
       } catch (err) { /* one bad row never breaks the whole sweep */ }
     });
     if (dayId && dayId > AS_OF.replace(/-/g, "")) setAsOf(isoOfDayId(dayId));

@@ -1279,8 +1279,8 @@ function parseMarketRate(html){
     } catch (e) {}
   }
   var visible = parseRenderedRate(doc);
+  var embedded = parseEmbeddedJsonRate(doc);
   if (visible){
-    var embedded = parseEmbeddedJsonRate(doc);
     if (embedded && !ratesMatch(embedded, visible)){
       /* embedded JSON disagrees with the visible Buy/Sell block
          (e.g. USD/MMK JSON 4,783.33 / 4,735.50 vs visible
@@ -1290,10 +1290,13 @@ function parseMarketRate(html){
     /* no embedded JSON, or it matches the visible block: verified */
     return visible;
   }
-  /* No visible block in this response: the embedded JSON rate is
-     unverified, so refuse it — the caller keeps the on-screen
-     snapshot rates and nothing is overwritten. */
-  return null;
+  /* No visible block in this response (the page is JS-rendered, so a
+     raw-HTML fetch carries no rendered Buy/Sell block): the embedded
+     JSON is the page's own data — accept it. Its dayId is still
+     checked by the caller, and the sanity band in
+     parseEmbeddedJsonRate applies. Refusing it here once left the
+     page on a stale snapshot for a whole day. */
+  return embedded;
 }
 function parseAnyRate(text){
   if (!text) return null;
