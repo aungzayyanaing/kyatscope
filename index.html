@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="my">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Ccircle cx='50' cy='50' r='38' fill='none' stroke='%23c99612' stroke-width='7'/%3E%3Ctext x='48' y='70' font-family='Arial,Helvetica,sans-serif' font-size='54' font-weight='800' text-anchor='middle' fill='%23c99612'%3EK%3C/text%3E%3C/svg%3E" />
+<title>KyatScope — MMK Exchange Rates</title>
+<style>
+  :root{
+    --bg:#fafafa;
+    --card:#ffffff;
+    --card-2:#f0f0f0;
+    --ink:#111111;
+    --ink-2:#4a4a4a;
+    --ink-3:#8a8a8a;
+    --line:#e3e3e3;
+    --black:#111111;
+    --black-2:#000000;
+    --gold:#a87b0a;
+    --gold-bright:#c99a1b;
+    --gold-bg:#faf3dd;
+    --up:#1e9e50;
+    --up-bg:rgba(30,158,80,.13);
+    --down:#d43a2f;
+    --down-bg:rgba(212,58,47,.10);
+    --flat:#767676;
+    --flat-bg:#eeeeee;
+    --shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.05);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0a0a0a;
+      --card:#151515;
+      --card-2:#101010;
+      --ink:#f2f2f2;
+      --ink-2:#b5b5b5;
+      --ink-3:#8c8c8c;
+      --line:#2b2b2b;
+      --black:#000000;
+      --black-2:#000000;
+      --gold:#e3b93e;
+      --gold-bright:#e3b93e;
+      --gold-bg:rgba(227,185,62,.12);
+      --up:#3ecf6e;
+      --up-bg:rgba(62,207,110,.14);
+      --down:#ff7a6b;
+      --down-bg:rgba(255,122,107,.12);
+      --flat:#a3a3a3;
+      --flat-bg:rgba(163,163,163,.13);
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Myanmar Text","Noto Sans Myanmar","Pyidaungsu",system-ui,-apple-system,"Segoe UI",sans-serif;
+    line-height:1.65;-webkit-font-smoothing:antialiased;
+  }
+  .num{font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  a{color:var(--gold);text-underline-offset:2px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px 64px}
+
+  /* ---------- header ---------- */
+  header.hero{padding:40px 0 6px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  .brand .logo{height:48px;width:48px;display:block;flex:none}
+  .brand .word{font-weight:800;letter-spacing:.22em;font-size:14px;color:var(--ink)}
+  .brand .word em{font-style:normal;color:var(--gold)}
+  .brand .live{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:.02em;white-space:nowrap;line-height:1.2}
+  .live-dot{position:relative;width:10px;height:10px;flex:none;flex-shrink:0;align-self:center;vertical-align:middle;border-radius:50%;background:#22c55e;box-shadow:0 0 10px 2px rgba(34,197,94,.45),0 0 0 0 rgba(34,197,94,.45);animation:livePulse 2.2s ease-in-out infinite}
+  @keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 12px 3px rgba(34,197,94,.55),0 0 0 0 rgba(34,197,94,.40)}50%{opacity:.5;box-shadow:0 0 4px 1px rgba(34,197,94,.20),0 0 0 5px rgba(34,197,94,.07)}}
+  .hero h1{font-size:clamp(28px,5vw,40px);line-height:1.35;margin:0 0 8px;font-weight:800}
+  .hero p.lede{margin:0;color:var(--ink-2);max-width:620px;font-size:15.5px}
+  .upd{margin-top:10px;font-size:13px;color:var(--ink-3)}
+
+  /* ---------- controls ---------- */
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:30px 0 0}
+  .seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;box-shadow:var(--shadow)}
+  .seg button{
+    border:0;cursor:pointer;border-radius:999px;padding:9px 22px;font:inherit;font-size:15px;font-weight:700;
+    background:transparent;color:var(--ink-2);transition:background .2s,color .2s;
+  }
+  .seg button[aria-pressed="true"]{background:var(--black);color:#fff}
+  .seg button .code{font-size:11px;letter-spacing:.08em;opacity:.7;font-weight:600;margin-left:7px}
+  .mode-note{font-size:13.5px;color:var(--ink-2);margin:0;flex:1;min-width:220px}
+
+  /* ---------- panels ---------- */
+  section.panel{margin-top:34px}
+  .panel-head{margin-bottom:16px}
+  .panel-head h2{margin:0;font-size:20px;line-height:1.45;font-weight:800}
+  .panel-head p{margin:4px 0 0;color:var(--ink-2);font-size:14px;max-width:640px}
+  .panel-box{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px}
+
+  /* ---------- converter ---------- */
+  .conv-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:end}
+  .field label{display:block;font-size:13px;color:var(--ink-2);margin-bottom:6px;font-weight:600}
+  .field select,.field input{
+    width:100%;font:inherit;font-size:17px;padding:12px 14px;border-radius:12px;
+    border:1px solid var(--line);background:var(--card-2);color:var(--ink);
+  }
+  .field select:focus,.field input:focus{outline:2px solid var(--gold-bright);outline-offset:1px}
+  .swap-btn{
+    border:1px solid var(--line);background:var(--card-2);color:var(--ink);border-radius:50%;
+    width:44px;height:44px;font-size:19px;cursor:pointer;margin-bottom:4px;transition:transform .3s;
+  }
+  .swap-btn:hover{transform:rotate(180deg)}
+  .conv-modes{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .conv-modes button{border:1px solid var(--line);background:transparent;color:var(--ink-2);font:inherit;font-size:13.5px;font-weight:700;border-radius:999px;padding:6px 14px;cursor:pointer}
+  .conv-modes button[aria-pressed="true"]{background:var(--black);color:#fff;border-color:var(--black)}
+  .conv-result{margin-top:18px;background:var(--black);border:1px solid var(--black-2);color:#f5f5f5;border-radius:16px;padding:20px 22px}
+  .conv-result .r-main{font-size:clamp(22px,4.5vw,30px);font-weight:800;line-height:1.35}
+  .conv-result .r-main .gold{color:var(--gold-bright)}
+  .conv-result .r-sub{font-size:14px;opacity:.8;margin-top:4px}
+  .conv-result .r-chg{margin-top:10px;font-size:14.5px;font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .conv-result .r-chg .up{color:#3ecf6e}
+  .conv-result .r-chg .down{color:#ff7a6b}
+  .conv-result .r-chg .flat{color:#bdbdbd}
+  .conv-result .r-chg .lab{opacity:.75;font-weight:400}
+
+  /* ---------- ticker ---------- */
+  .ticker{overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--card);margin-top:26px}
+  .ticker-track{display:flex;width:max-content;animation:tickmove 32s linear infinite}
+  .ticker:hover .ticker-track{animation-play-state:paused}
+  @keyframes tickmove{to{transform:translateX(-50%)}}
+  .t-group{display:flex}
+  .t-item{display:flex;gap:9px;align-items:center;padding:9px 20px;font-size:13.5px;white-space:nowrap;border-right:1px solid var(--line);color:var(--ink-2)}
+  .t-item .cd{font-weight:800;color:var(--ink);letter-spacing:.04em}
+  .t-item .trend{font-size:13px}
+
+  /* ---------- section icons + reveal ---------- */
+  .panel-head h2{display:flex;align-items:center;gap:9px}
+  .h-ic{width:21px;height:21px;flex:none;color:var(--gold)}
+  section.panel{animation:panelIn .55s ease both}
+  section.panel:nth-of-type(2){animation-delay:.08s}
+  section.panel:nth-of-type(3){animation-delay:.16s}
+  section.panel:nth-of-type(4){animation-delay:.24s}
+  @keyframes panelIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .sel-row{display:flex;gap:10px;align-items:center}
+  .sel-row select{flex:1;min-width:0}
+
+  /* ---------- currency cards ---------- */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .fx-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;
+    box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%;
+    transition:border-color .2s, box-shadow .2s, transform .2s;position:relative;
+  }
+  .fx-card:hover{border-color:var(--gold-bright);transform:translateY(-2px)}
+  .fx-card:focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px}
+  .fx-card.selected{border-color:var(--gold-bright);box-shadow:0 0 0 1px var(--gold-bright),var(--shadow)}
+  .fx-top{display:flex;align-items:center;gap:12px}
+  /* overlapping circular flag pair (TradingView style) */
+  .flagpair{display:inline-flex;align-items:center;gap:5px;flex:none;vertical-align:middle}
+  .flagpair svg{position:static;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15);display:block;flex:none}
+  .flagpair.sm svg{width:22px;height:22px;border-width:1.5px}
+  .fx-names{min-width:0}
+  .fx-names .nm{font-weight:700;font-size:16px;line-height:1.35;display:block}
+  .fx-names .cd{font-size:11.5px;letter-spacing:.09em;color:var(--ink-3);font-weight:700}
+  .fx-unit{margin-left:auto;font-size:11.5px;color:var(--ink-3);text-align:right;line-height:1.45;flex:none}
+  .fx-prices{display:flex;gap:22px;margin-top:16px}
+  .fx-prices .col .lab{font-size:12.5px;color:var(--ink-3);display:block}
+  .fx-prices .col .val{font-size:22px;font-weight:800;line-height:1.3;color:var(--ink);display:inline-block;border-radius:6px;padding:0 4px;margin:0 -4px}
+  .flash-up{animation:flashUp .9s ease}
+  .flash-down{animation:flashDown .9s ease}
+  @keyframes flashUp{0%{background:var(--up-bg);color:var(--up)}100%{background:transparent}}
+  @keyframes flashDown{0%{background:var(--down-bg);color:var(--down)}100%{background:transparent}}
+  .fx-foot{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .trend{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;font-weight:800}
+  .trend.up{color:var(--up)} .trend.down{color:var(--down)} .trend.flat{color:var(--flat)}
+  .spread{font-size:12.5px;color:var(--ink-3)}
+
+  /* ---------- charts ---------- */
+  svg text{font-family:inherit}
+
+  /* ---------- TradingView-style chart ---------- */
+  .tv-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .tv-info{font-size:13.5px;color:var(--ink-2);line-height:1.6;min-height:24px}
+  .tv-info .pair{font-weight:800;color:var(--ink);font-size:14.5px}
+  .tv-info .ohlc{white-space:normal}
+  .tv-info .up{color:var(--up);font-weight:700}
+  .tv-info .dn{color:var(--down);font-weight:700}
+  .tv-tools{display:flex;gap:6px;align-items:center;flex:none;flex-wrap:wrap}
+  .tv-prog{font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+  .tv-anchor{font-size:12.5px;color:var(--gold);font-weight:700;white-space:nowrap}
+  .tv-anchor::before{content:"◆";font-size:9px;margin-right:5px;vertical-align:2px}
+  .tv-tools button{
+    border:1px solid var(--line);background:var(--card-2);color:var(--ink-2);font:inherit;
+    font-size:13px;font-weight:700;border-radius:8px;padding:5px 13px;cursor:pointer;line-height:1.5;
+  }
+  .tv-tools button[aria-pressed="true"]{background:var(--black);color:#fff;border-color:var(--black)}
+  .tv-tools button:focus-visible{outline:2px solid var(--gold-bright);outline-offset:1px}
+  #tvChart{cursor:crosshair;touch-action:pan-y;user-select:none;-webkit-user-select:none;border-radius:8px}
+  #tvChart .lp-dot{animation:lpPulse 1.6s ease-in-out infinite}
+  @keyframes lpPulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (prefers-reduced-motion: reduce){ #tvChart .lp-dot{animation:none} }
+  #tvChart.dragging{cursor:grabbing}
+  #tvChart svg{display:block;width:100%;height:auto}
+  .tv-hint{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
+
+/* ---------- table ---------- */
+  .cmp{width:100%;border-collapse:collapse;font-size:14.5px}
+  .cmp th,.cmp td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:right}
+  .cmp th:first-child,.cmp td:first-child{text-align:left}
+  .cmp th{font-size:12.5px;color:var(--ink-3);font-weight:700}
+  .cmp tbody tr:last-child td{border-bottom:0}
+  .cmp .trend{font-size:13.5px}
+
+  .fade{animation:fade .45s ease both}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  /* ---------- search + misc (103 currencies) ---------- */
+  .fx-search-wrap{margin-top:16px}
+  .fx-search{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:4px 14px;min-height:52px}
+  .fx-search svg{width:19px;height:19px;flex:none;color:var(--gold)}
+  .fx-search input{flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;font-size:16px;padding:12px 0;min-height:44px}
+  .fx-search input::placeholder{color:var(--ink-3);opacity:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fx-search input:focus{outline:none}
+  .fx-search:focus-within{border-color:var(--gold-bright);box-shadow:0 0 0 1px var(--gold-bright),var(--shadow)}
+  .fx-meta{display:flex;align-items:center;justify-content:space-between;gap:8px 14px;flex-wrap:wrap;padding:6px 4px 0;min-height:22px}
+  .fx-hint{font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+  .fx-count{font-size:13px;color:var(--ink-3);white-space:nowrap;margin-left:auto}
+  .src-chip{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--gold);background:var(--gold-bg);border-radius:999px;padding:1px 9px;line-height:1.7}
+  .grid-empty{grid-column:1/-1;text-align:center;color:var(--ink-2);padding:34px 16px;background:var(--card);border:1px dashed var(--line);border-radius:var(--radius);font-size:15px}
+  .conv-search{width:100%;font:inherit;font-size:14.5px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card-2);color:var(--ink);margin-bottom:8px}
+  .conv-search:focus{outline:2px solid var(--gold-bright);outline-offset:1px}
+  .tv-live{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;letter-spacing:.16em;color:var(--up);line-height:1.2}
+  .live-dot.sm{width:8px;height:8px}
+
+
+  /* ---------- v15: Top Gainers / Popular / search-only rest, columns, sticky search, QA fixes ---------- */
+  .fx-search-wrap{position:sticky;top:8px;z-index:60;background:var(--bg)}
+  .fx-search{background:var(--card);backdrop-filter:blur(6px)}
+  .ticker{position:relative;padding-right:54px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%)}
+  .ticker.paused .ticker-track{animation-play-state:paused}
+  .ticker-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;font-weight:800;cursor:pointer;z-index:2}
+  .grid.gainers{grid-template-columns:repeat(5,1fr)}
+  .fx-card .rank{position:absolute;top:10px;right:12px;font-size:11px;font-weight:800;color:var(--gold);background:var(--gold-bg);border-radius:999px;padding:1px 8px}
+  .fx-prices .col{flex:1}
+  .fx-prices .col + .col{border-left:1px solid var(--line);padding-left:16px}
+  .fx-names .nm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;word-break:keep-all;overflow-wrap:break-word}
+  .fx-names .cd{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+  .az-bar{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+  .az-bar button{min-width:44px;height:44px;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink-2);font:inherit;font-weight:800;cursor:pointer}
+  .az-bar button:hover{border-color:var(--gold-bright);color:var(--ink)}
+  .search-hint{font-size:13.5px;color:var(--ink-2);margin-top:10px}
+  .detail-note{margin-bottom:16px;border:1px solid var(--gold-bright);background:var(--gold-bg);border-radius:14px;padding:14px 16px;font-size:14.5px;line-height:1.6}
+  .detail-note strong{font-size:15.5px}
+  .tv-info .l1{display:block}
+  .tv-info .l2{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:3px}
+  .tv-info .ohlc{white-space:normal}
+  .tv-reset-note{font-size:12.5px;color:var(--up);font-weight:700;opacity:0;transition:opacity .25s}
+  .tv-reset-note.show{opacity:1}
+  .tv-anchor{display:inline-block;margin-top:8px;border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:var(--card-2)}
+  .cmp th,.cmp td{border-left:1px solid var(--line)}
+  .cmp th:first-child,.cmp td:first-child{border-left:0}
+  .cmp thead th{position:sticky;top:0;background:var(--card);z-index:1}
+  .seg button{min-height:44px}
+  .tv-tools button{min-height:40px;padding:7px 13px}
+  .conv-modes button{min-height:40px}
+  @media (max-width:860px){ .grid.gainers{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:600px){
+    .grid.gainers{grid-template-columns:1fr 1fr}
+    .fx-card{padding:13px 14px}
+    .fx-prices{gap:12px;margin-top:10px}
+    .fx-prices .col + .col{padding-left:12px}
+    .fx-prices .col .val{font-size:18px}
+    .fx-foot{margin-top:9px}
+    .fx-names .cd{max-width:128px}
+    .tv-tools button{min-height:44px}
+    .conv-modes button{min-height:44px}
+    .seg button{padding:9px 16px}
+    .panel{margin-top:26px}
+    section.panel{margin-top:26px}
+  }
+  @media (max-width:860px){
+    .grid{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:600px){
+    .wrap{padding:0 16px 48px}
+    header.hero{padding-top:28px}
+    .brand .live{font-size:12px;gap:6px}
+    .grid{grid-template-columns:1fr}
+    .conv-grid{grid-template-columns:1fr;align-items:stretch}
+    .swap-btn{margin:0 auto;transform:rotate(90deg)}
+    .swap-btn:hover{transform:rotate(270deg)}
+    .panel-box{padding:18px}
+    .cmp thead{display:none}
+    .cmp,.cmp tbody,.cmp tr,.cmp td{display:block;width:100%}
+    .cmp tr{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;background:var(--card-2)}
+    .cmp tbody tr:last-child td{border-bottom:1px solid var(--line)}
+    .cmp tr td:last-child{border-bottom:0}
+    .cmp td{border-bottom:1px solid var(--line);padding:6px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:right}
+    .cmp td::before{content:attr(data-l);color:var(--ink-3);font-size:12.5px;text-align:left}
+    .cmp td:first-child{font-weight:800;font-size:16px;display:block}
+    .cmp td:first-child::before{content:""}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .live-dot{animation:none;opacity:1;box-shadow:0 0 8px 2px rgba(34,197,94,.40)}
+    .fade{animation:none}
+    html{scroll-behavior:auto}
+    .swap-btn{transition:none}
+    .ticker-track{animation:none;flex-wrap:wrap;width:auto}
+    .ticker-track .t-group[aria-hidden="true"]{display:none}
+    section.panel{animation:none}
+    .flash-up,.flash-down{animation:none}
+    .fx-card{transition:none}
+    .fx-card:hover{transform:none}
+  }
+
+  /* ---------- v16: Top Gainers grid overflow fix ----------
+     Card content (flag pair + long names + two prices) had a ~250px
+     min-content width, and plain 1fr tracks size to that minimum, so
+     5 columns burst past the container (#4 cut on desktop) and
+     2 columns burst past the phone screen (#2 cut). Tracks now use
+     minmax(0,1fr) and gainers cards get a compact layout that can
+     actually shrink: smaller flags, wrapping unit note, tighter
+     price columns, and stacked Buy/Sell on phones. */
+  html,body{overflow-x:clip}
+  /* The ticker track is far wider than the screen by design (marquee);
+     paint containment + overflow:clip stop its transformed overflow
+     from leaking into the page's scroll width at phone widths. */
+  .ticker{overflow:hidden;overflow:clip;contain:paint;max-width:100%;height:44px}
+  .ticker-track{position:absolute;left:0;top:50%;margin-top:-20px}
+  /* Clip the marquee inside a bounded viewport that ends before the
+     pause button (right:54px). The absolutely-positioned track's
+     containing block was the ticker's padding box, so it leaked
+     54px (the reserved button space) into the page scroll width
+     and passed underneath the button. The viewport is positioned
+     with left+right constraints, has its own overflow clip, and is
+     the track's containing block, so the track can never extend
+     the document's scroll width. */
+  .ticker-viewport{position:absolute;left:0;top:0;bottom:0;right:54px;overflow:hidden;overflow:clip;contain:paint;clip-path:inset(0)}
+  .ticker-viewport .ticker-track{left:0}
+  .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .grid>*{min-width:0}
+  .fx-card{min-width:0}
+  .grid.gainers{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .gainers .fx-card{padding:16px 14px}
+  .gainers .fx-top{gap:8px;flex-wrap:wrap}
+  .gainers .flagpair{gap:4px}
+  .gainers .flagpair svg{width:24px;height:24px;border-width:1.5px}
+  .gainers .fx-names{flex:1 1 0;min-width:0}
+  .gainers .fx-names .nm{font-size:14.5px;padding-right:26px}
+  .gainers .fx-names .cd{max-width:100%;font-size:10.5px}
+  .gainers .fx-unit{margin-left:0;text-align:left;font-size:10.5px;flex:1 1 100%}
+  .gainers .fx-unit br{display:none}
+  .gainers .fx-prices{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+  .gainers .fx-prices .col{min-width:0}
+  .gainers .fx-prices .col + .col{padding-left:8px}
+  .gainers .fx-prices .col .lab{font-size:11.5px;white-space:nowrap}
+  .gainers .fx-prices .col .val{font-size:15px;white-space:nowrap}
+  .gainers .fx-foot{gap:6px 8px}
+  .gainers .trend{font-size:12.5px}
+  .gainers .spread{font-size:11.5px}
+  @media (max-width:860px){
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .grid.gainers{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:600px){
+    .grid{grid-template-columns:minmax(0,1fr)}
+    .grid.gainers{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .gainers .fx-card{padding:12px 10px}
+    .gainers .fx-prices{grid-template-columns:minmax(0,1fr);gap:6px;margin-top:10px}
+    .gainers .fx-prices .col + .col{border-left:0;border-top:1px solid var(--line);padding-left:0;padding-top:6px}
+    .gainers .fx-prices .col .val{font-size:16px}
+    .gainers .fx-names .nm{font-size:13.5px}
+  }
+
+  /* ---------- v17: mobile search placeholder fix ----------
+     The field now holds only the search icon and the input, with a
+     short placeholder ("ငွေကြေး ရှာရန်") that fits whole at phone
+     widths. The example hints (USD, EUR, …) and the ၁၀၃ မျိုး count
+     live on their own .fx-meta row BELOW the field — never inside
+     it — so nothing competes with the placeholder for width and it
+     can no longer be clipped mid-word on mobile. */
+  .fx-search input::placeholder{white-space:nowrap;overflow:visible;text-overflow:clip}
+  @media (max-width:600px){
+    .fx-search{padding:4px 12px;gap:8px}
+    .fx-meta{padding:7px 4px 2px}
+  }
+
+  /* ---------- v18: professional header nav + footer, candle green,
+     and the ticker scroll-width leak ----------
+     .wrap clips horizontal overflow (clip, not hidden, so the sticky
+     search bar keeps sticking): the marquee track's transformed
+     overflow no longer inflates body scrollWidth at phone widths
+     (measured 444px -> 390px at a 390px viewport). */
+  .wrap{overflow-x:clip}
+  section.panel{scroll-margin-top:96px}
+  #searchBar{scroll-margin-top:10px}
+  .site-nav{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 22px}
+  .site-nav a{
+    display:inline-flex;align-items:center;justify-content:center;min-height:40px;
+    padding:7px 18px;border:1px solid var(--line);border-radius:999px;background:var(--card);
+    color:var(--ink-2);font-size:14px;font-weight:700;line-height:1.5;text-decoration:none;
+    box-shadow:var(--shadow);transition:border-color .2s,color .2s;
+  }
+  .site-nav a:hover{border-color:var(--gold-bright);color:var(--ink)}
+  .site-nav a:focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px}
+  .site-foot{margin-top:52px;background:var(--black);color:#f5f5f5;border:1px solid var(--black-2);border-radius:20px;padding:30px 30px 22px}
+  .foot-grid{display:grid;grid-template-columns:1.6fr .8fr 1.4fr;gap:16px 36px}
+  .foot-word{font-weight:800;letter-spacing:.22em;font-size:15px;color:#f5f5f5}
+  .foot-word em{font-style:normal;color:var(--gold-bright)}
+  .foot-about p{margin:12px 0 0;font-size:14px;line-height:1.75;color:rgba(245,245,245,.75);max-width:420px}
+  .foot-nav h3,.foot-note h3{margin:2px 0 12px;font-size:13px;letter-spacing:.14em;color:var(--gold-bright);font-weight:800}
+  .foot-nav a{display:block;width:fit-content;color:#f5f5f5;text-decoration:none;font-size:14.5px;font-weight:600;padding:5px 0;line-height:1.6}
+  .foot-nav a:hover{color:var(--gold-bright)}
+  .foot-nav a:focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px}
+  .foot-note p{margin:0;font-size:13.5px;line-height:1.75;color:rgba(245,245,245,.68)}
+  .foot-bar{margin-top:26px;padding-top:16px;border-top:1px solid rgba(255,255,255,.16);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:13.5px;color:rgba(245,245,245,.75)}
+  .foot-dot{color:var(--gold-bright)}
+  @media (max-width:860px){
+    .foot-grid{grid-template-columns:1fr 1fr}
+    .foot-about{grid-column:1/-1}
+  }
+  @media (max-width:600px){
+    .site-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:18px}
+    .site-nav a{padding:8px 10px;font-size:13.5px;min-height:44px;white-space:normal}
+    .site-foot{padding:24px 20px 18px}
+    .foot-grid{grid-template-columns:1fr}
+  }
+
+  /* ---------- v19: section icons alignment + Global Live (Binance spot) ---------- */
+  .site-nav a{gap:7px}
+  .site-nav a svg{width:15px;height:15px;flex:none}
+  .foot-nav a{display:flex;align-items:center;gap:8px}
+  .foot-nav a svg{width:15px;height:15px;flex:none;color:var(--gold-bright)}
+  .foot-brand{display:flex;align-items:center;gap:10px}
+  .foot-logo{width:30px;height:30px;flex:none;display:block}
+  .swap-btn{display:inline-flex;align-items:center;justify-content:center}
+  .swap-btn svg{flex:none;display:block}
+  .panel-head h2 .tv-live{margin-left:6px}
+  .global-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .gl-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);min-width:0}
+  .gl-top{display:flex;align-items:center;gap:11px}
+  .gl-coin{width:44px;height:44px;flex:none;display:block}
+  .gl-names{min-width:0}
+  .gl-names .nm{font-weight:700;font-size:15.5px;line-height:1.35;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gl-names .cd{font-size:11.5px;letter-spacing:.09em;color:var(--ink-3);font-weight:700}
+  .gl-price{margin-top:13px;font-size:23px;font-weight:800;line-height:1.3;color:var(--ink)}
+  .gl-price .unit{font-size:12.5px;font-weight:700;color:var(--ink-3);letter-spacing:.06em}
+  .gl-price .val{display:inline-block;border-radius:6px;padding:0 4px;margin:0 -4px}
+  .gl-foot{display:flex;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap}
+  .gl-range{font-size:12.5px;color:var(--ink-3)}
+  .global-status{margin:14px 2px 0;font-size:13px;color:var(--ink-3)}
+  .global-note{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px}
+  .global-note h3{margin:0 0 10px;font-size:15.5px;font-weight:800;display:flex;align-items:center;gap:8px;color:var(--ink)}
+  .global-note h3 svg{width:18px;height:18px;flex:none;color:var(--gold)}
+  .global-note ul{margin:0;padding-left:20px}
+  .global-note li{font-size:14px;line-height:1.75;color:var(--ink-2);margin-top:6px}
+  .global-note li strong{color:var(--ink)}
+  /* ---------- v20: live badges + minimal text ----------
+     Currency cards carry price, flag pair and change only — no card
+     charts. The one chart on the page is the main candlestick chart,
+     whose LIVE timeframe ticks from real global feeds (Binance,
+     then Bybit, then a live forex feed) against the real USD/MMK
+     market anchor (see the LIVE tick engine in the script). */
+  .lv{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:var(--up)}
+  .lv-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px 1px rgba(34,197,94,.5);animation:livePulse 2.2s ease-in-out infinite;flex:none}
+  .tv-live.off{color:var(--flat)}
+  @media (prefers-reduced-motion: reduce){ .lv-dot{animation:none} }
+  @media (max-width:860px){ .global-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:600px){
+    .global-grid{grid-template-columns:minmax(0,1fr)}
+    .gl-card{padding:15px 16px}
+    .gl-price{font-size:21px}
+    .global-note{padding:17px 18px}
+  }
+  /* ---------- v21: USD is the daily anchor, never LIVE ----------
+     USD/MMK is the anchor itself: its live factor is fixed at 1 and
+     its price only changes when a new daily rate publishes, so the
+     USD card must not carry the green LIVE badge. It gets a neutral
+     gold daily-anchor label instead. Also, .lv sets display:inline-flex,
+     which overrode the hidden attribute and showed LIVE on every card
+     regardless of its feed — hidden LIVE badges are now really hidden,
+     so a currency with no live pair (USD, KGS) never shows one, while
+     currencies with a real live feed still do once their feed arrives. */
+  .lv[hidden]{display:none !important}
+  .anchor-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--gold);background:var(--gold-bg);border-radius:999px;padding:2px 9px;line-height:1.6;white-space:nowrap}
+  .anchor-badge i{font-style:normal;font-size:8px}
+
+  /* ---------- v23: phone declutter + softer, smaller icons ----------
+     On phones the page drops low-value text (lede line, mode note,
+     search examples, the duplicate last-close pill, footer note),
+     tightens spacing into calm single/double columns, and shrinks
+     every icon with softer opacity and gentler glows so icons sit
+     quietly beside the text instead of shouting over it. Desktop
+     is untouched. */
+  @media (max-width:600px){
+    /* icons: smaller, softer, aligned with the text baseline */
+    .brand .logo{width:38px;height:38px}
+    .brand .word{font-size:12.5px;letter-spacing:.18em}
+    .h-ic{width:16px;height:16px;opacity:.8;align-self:center}
+    .site-nav a{gap:5px}
+    .site-nav a svg{width:12px;height:12px;opacity:.7}
+    .foot-nav a svg{width:12px;height:12px;opacity:.75}
+    .foot-logo{width:24px;height:24px}
+    .fx-search svg{width:16px;height:16px;opacity:.75}
+    .swap-btn{width:38px;height:38px}
+    .swap-btn svg{width:16px;height:16px}
+    .flagpair svg{width:25px;height:25px;border-width:1.5px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+    .gainers .flagpair svg{width:21px;height:21px}
+    .gl-coin{width:34px;height:34px}
+    .live-dot{width:8px;height:8px;box-shadow:0 0 5px 1px rgba(34,197,94,.30)}
+    .lv-dot{width:6px;height:6px;box-shadow:0 0 4px 1px rgba(34,197,94,.35)}
+    /* declutter: hide text that duplicates what is already shown */
+    .hero p.lede{display:none}
+    .mode-note{display:none}
+    .fx-hint{display:none}
+    .tv-anchor{display:none}
+    .foot-note{display:none}
+    .fx-unit{font-size:10px;opacity:.85}
+    /* calmer, more systematic spacing and columns */
+    header.hero{padding-top:22px}
+    .brand{margin-bottom:14px}
+    .hero h1{font-size:23px;line-height:1.45}
+    .upd{margin-top:6px;font-size:12px}
+    .controls{margin-top:18px}
+    .seg button{padding:8px 14px;font-size:14px}
+    section.panel{margin-top:24px}
+    .panel-head{margin-bottom:10px}
+    .panel-head h2{font-size:17px;gap:7px}
+    .panel-box{padding:14px}
+    .fx-card{padding:14px}
+    .gl-card{padding:14px 16px}
+    .gl-price{font-size:20px;margin-top:9px}
+    .conv-result{padding:16px 18px}
+    .ticker{height:38px}
+    .site-foot{padding:20px 18px 16px;margin-top:36px}
+    .global-status{font-size:12px}
+  }
+
+  /* ---------- v24: phone header nav pills — no overlap, no clipping ----------
+     The old phone rule forced all four pills into one row of four
+     minmax(0,1fr) columns (~77px each at a 360px viewport) while the
+     pill content was white-space:nowrap with an icon + gap. The
+     centred content was wider than its column, so it spilled out of
+     both sides of the pill border: the first pill's icon sat half
+     outside its border, the second pill overlapped the first pill's
+     right edge, and labels were cut. Shrinking the icon alone could
+     never fix that geometry. On phones the nav is now a clean 2 x 2
+     grid: each pill gets roughly half the content width (~160px at
+     360-390px), labels wrap instead of overflowing, and the icon is
+     a non-shrinking flex item kept fully inside the pill border. */
+  @media (max-width:600px){
+    .site-nav{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
+      width:100%;
+      margin:2px 0 18px;
+    }
+    .site-nav a{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      width:100%;
+      min-width:0;
+      min-height:44px;
+      padding:8px 10px;
+      font-size:13.5px;
+      line-height:1.45;
+      white-space:normal;
+      overflow-wrap:break-word;
+      text-align:center;
+    }
+    .site-nav a svg{
+      width:14px;height:14px;
+      flex:0 0 auto;
+      min-width:14px;
+      opacity:.75;
+    }
+  }
+
+  /* ---------- v25: iPhone 11 Pro Max (414 x 896) pass ----------
+     1) The sticky search bar is desktop-only now. On phones it was
+        position:sticky, so the Market/Bank segment, converter mode
+        buttons and card tops scrolled UNDERNEATH it and looked
+        clipped/overlapped (the user's screenshot: buy/sell labels
+        cut at the top, search field sitting on top of the card
+        below it). On phones the search simply scrolls with the page
+        — nothing is ever hidden behind it.
+     2) Chart timeframe controls: .tv-bar stacked as a column and
+        .tv-tools became a fixed 5-column grid, so LIVE / 1D / 1W /
+        1M / reset each get an equal, fully-visible cell at 414px
+        (before, the row ran past the card's right edge and the 1W
+        label was cut off). Labels wrap inside their own button.
+     3) Small tap-target and rhythm fixes at phone width: the
+        Market/Bank segment spans the full row, the ticker bar is
+        tall enough for its pause button, and the converter swap
+        button goes back to a full 44px target. */
+  @media (max-width:600px){
+    .fx-search-wrap{position:static;top:auto;z-index:auto}
+    .controls .seg{display:flex;width:100%}
+    .controls .seg button{flex:1 1 0;min-width:0;padding:9px 8px;white-space:normal}
+    .ticker{height:44px}
+    .ticker-btn{width:40px;height:40px}
+    .swap-btn{width:44px;height:44px}
+    .tv-bar{flex-direction:column;align-items:stretch;gap:10px}
+    .tv-info{font-size:12.5px;line-height:1.55;min-height:0}
+    .tv-tools{
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:6px;
+      width:100%;
+      align-items:stretch;
+    }
+    .tv-tools .tv-live{grid-column:1/-1;justify-self:start;align-self:center;min-height:20px}
+    .tv-tools button{
+      min-width:0;
+      min-height:52px;
+      padding:7px 2px;
+      font-size:11.5px;
+      line-height:1.4;
+      white-space:normal;
+      text-align:center;
+      border-radius:10px;
+    }
+    .tv-tools #tvReset{font-size:16px}
+    .tv-reset-note{white-space:normal}
+  }
+  @media (max-width:380px){
+    .tv-tools button{font-size:10.5px}
+  }
+  /* ---------- v21: Basic Calculator + Crypto 200+ / Stocks 200+ + LW chart ---------- */
+  .calc-box{max-width:460px}
+  .calc-hist{min-height:22px;font-size:13.5px;color:var(--ink-3);text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .calc-disp{font-size:clamp(28px,6vw,40px);font-weight:800;text-align:right;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:6px 2px 10px}
+  .calc-disp .cur{font-size:14px;color:var(--ink-3);font-weight:700;margin-left:6px}
+  .calc-keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:6px}
+  .calc-keys button{border:1px solid var(--line);background:var(--card-2);color:var(--ink);font:inherit;font-size:19px;font-weight:700;border-radius:12px;padding:13px 0;min-height:52px;cursor:pointer}
+  .calc-keys button:hover{border-color:var(--gold-bright)}
+  .calc-keys button:active{transform:translateY(1px)}
+  .calc-keys button.op{background:var(--gold-bg);border-color:var(--gold-bright);color:var(--gold)}
+  .calc-keys button.eq{background:var(--black);color:#fff;border-color:var(--black-2)}
+  .calc-keys button.util{font-size:16px;color:var(--ink-2)}
+  .calc-keys button:focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px}
+  .calc-send{margin-top:12px;width:100%;border:1px solid var(--gold-bright);background:var(--gold-bg);color:var(--ink);font:inherit;font-size:14.5px;font-weight:700;border-radius:999px;padding:10px 16px;cursor:pointer}
+  .calc-note{margin:10px 2px 0;font-size:12.5px;color:var(--ink-3)}
+  .asset-tools{display:flex;gap:8px;flex-wrap:wrap;margin:0 2px 14px;align-items:center}
+  .asset-tools input[type="search"]{flex:1;min-width:180px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:14px;border-radius:999px;padding:9px 16px}
+  .asset-tools input[type="search"]:focus{outline:2px solid var(--gold-bright);outline-offset:1px}
+  .pager{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+  .pager button{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:700;border-radius:999px;padding:7px 14px;cursor:pointer}
+  .pager button:disabled{opacity:.45;cursor:default}
+  .pager .pg-info{font-size:13px;color:var(--ink-2);white-space:nowrap}
+  .asset-count{font-size:13px;color:var(--ink-3);margin:0 2px 12px}
+  .asset-card{cursor:pointer;text-align:left;width:100%;font:inherit}
+  .asset-card .gl-coin{border-radius:50%;object-fit:cover;background:var(--card-2)}
+  .asset-card .gl-icwrap.st-logo{border-radius:12px;background:#fff;overflow:hidden}
+  .asset-card .gl-icwrap.st-logo .gl-coin{border-radius:0;object-fit:contain;background:#fff;padding:4px}
+  .asset-card .gl-icwrap.st-logo.dark{background:#171717}
+  .asset-card .gl-icwrap.st-logo.dark .gl-coin{background:#171717}
+  .asset-card .mono{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--gold-bg);color:var(--gold);font-weight:800;font-size:13px;letter-spacing:.02em}
+  .asset-card.sel{outline:2px solid var(--gold-bright);outline-offset:1px}
+  .sp-card{border:1px solid var(--gold-bright);background:linear-gradient(180deg,var(--gold-bg),var(--card))}
+  .sp-card .nm{font-size:16.5px}
+  .lw-wrap{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+  .lw-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .lw-bar .lw-title{font-weight:800;font-size:15px}
+  .lw-bar .lw-asset{font-size:13.5px;color:var(--ink-2)}
+  .lw-bar button{border:1px solid var(--line);background:transparent;color:var(--ink-2);font:inherit;font-size:13px;font-weight:700;border-radius:999px;padding:6px 13px;cursor:pointer}
+  .lw-bar button[aria-pressed="true"]{background:var(--black);color:#fff;border-color:var(--black)}
+  .lw-bar button:disabled{opacity:.45;cursor:default}
+  #lwChart{width:100%;height:320px}
+  .lw-status{font-size:12.5px;color:var(--ink-3);margin:8px 2px 0}
+  .t-unit{font-size:11px;color:var(--ink-3);font-weight:700;margin-left:3px}
+  .single-note{font-size:11.5px;color:var(--ink-3);font-weight:600}
+  .foot-attr{font-size:12.5px;color:rgba(245,245,245,.6)}
+  .foot-attr a{color:var(--gold-bright)}
+  .gl-icwrap{position:relative;width:44px;height:44px;flex:none;display:block}
+  .gl-icwrap .gl-coin{width:44px;height:44px}
+  .gl-icwrap .mono{position:absolute;inset:0;display:none}
+  @media (max-width:600px){
+    #lwChart{height:260px}
+    .calc-keys button{min-height:48px}
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 120 120" role="img" aria-label="KyatScope logo" focusable="false"><defs><linearGradient id="ksGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6dc8f"/><stop offset=".55" stop-color="#d9a92c"/><stop offset="1" stop-color="#b57f0e"/></linearGradient></defs><circle cx="50" cy="50" r="38" fill="none" stroke="url(#ksGold)" stroke-width="5"/><path d="M50 15v9M50 76v9M15 50h9M76 50h9" stroke="url(#ksGold)" stroke-width="3"/><text x="48" y="69" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="url(#ksGold)">K</text><rect x="72" y="76" width="15" height="11" rx="2.5" transform="rotate(45 79.5 81.5)" fill="url(#ksGold)"/><rect x="82.5" y="86.5" width="15" height="11" rx="2.5" transform="rotate(45 90 92)" fill="url(#ksGold)"/><rect x="94" y="99" width="18" height="12" rx="3" transform="rotate(45 103 105)" fill="url(#ksGold)"/></svg>
+      <span class="word">KYAT<em>SCOPE</em></span>
+      <span class="live" role="status" aria-label="Active Now"><span class="live-dot" aria-hidden="true"></span>Active Now</span>
+    </div>
+    <nav class="site-nav" aria-label="အဓိက လင့်ခ်များ">
+      <a href="#ratesPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none"/></svg>ဈေးနှုန်းများ</a>
+      <a href="#convPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.5" y2="12.1"/><line x1="12" y1="12" x2="12" y2="12.1"/><line x1="15.5" y1="12" x2="15.5" y2="12.1"/><line x1="8.5" y1="15.5" x2="8.5" y2="15.6"/><line x1="12" y1="15.5" x2="12" y2="15.6"/><line x1="15.5" y1="15.5" x2="15.5" y2="15.6"/></svg>ငွေလဲတွက်စက်</a>
+      <a href="#chartPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4v15.5h16"/><line x1="8" y1="15" x2="8" y2="10"/><line x1="12.5" y1="15" x2="12.5" y2="6"/><line x1="17" y1="15" x2="17" y2="11"/></svg>ဂရပ်</a>
+      <a href="#searchBar" data-focus-search><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20.5" y1="20.5" x2="16.2" y2="16.2"/></svg>ရှာဖွေရန်</a>
+    </nav>
+    <h1>ကျပ်ငွေလဲနှုန်း ဈေးကွက် <span id="h1Mode" style="color:var(--gold)">· ဈေးကွက်ဈေး</span></h1>
+    <p class="lede">နိုင်ငံခြားငွေ <span id="curCount">၆</span> မျိုး · မြန်မာကျပ် (MMK) လဲလှယ်နှုန်းများ</p>
+    <p class="upd" id="updateStatus">ပြထားသော ဈေးမှာ ၂၀၂၆-၁၀-၃၀ မှတ်တမ်း ဖြစ်သည် — ဈေးအသစ် တောင်းနေပါတယ်…</p>
+  </header>
+
+  <div class="ticker" id="tickerBox" aria-label="ငွေလဲနှုန်း အကျဉ်းချုပ်">
+    <div class="ticker-viewport"><div class="ticker-track" id="tickerTrack"></div></div>
+    <button class="ticker-btn" id="tickerToggle" type="button" aria-pressed="false" aria-label="Ticker ခဏရပ်ရန်" title="Ticker ရပ် / ပြန်စ">❚❚</button>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="ဈေးအမျိုးအစား ရွေးရန်">
+      <button id="btnMarket" aria-pressed="true">ဈေးကွက်ဈေး <span class="code">MARKET</span></button>
+      <button id="btnBank" aria-pressed="false">ဘဏ်ဈေး <span class="code">BANK</span></button>
+    </div>
+    <p class="mode-note" id="modeNote" role="status">လက်ရှိ ပြနေတာ — ဈေးကွက်ဈေး (MARKET)</p>
+  </div>
+
+  <div class="fx-search-wrap" id="searchBar">
+    <div class="fx-search" role="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20.5" y1="20.5" x2="16.2" y2="16.2"/></svg>
+      <input id="fxSearch" type="search" autocomplete="off" placeholder="ငွေကြေး ရှာရန်" aria-label="ငွေကြေး ရှာရန် — နာမည်၊ code၊ နိုင်ငံနာမည်ဖြင့်" />
+    </div>
+    <div class="fx-meta"><span class="fx-hint">ဥပမာ — USD, EUR, ထိုင်း</span><span class="fx-count num" id="fxCount" aria-live="polite"></span></div>
+  </div>
+
+  <section class="panel" aria-labelledby="gainTitle">
+    <div class="panel-head">
+      <h2 id="gainTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 19 L10 11 L13.5 14.5 L20 5.5"/><path d="M14.5 5.5 H20 V11"/></svg>အတက်ဆုံး ၅ မျိုး</h2>
+    </div>
+    <div class="grid gainers" id="gridGainers"></div>
+  </section>
+
+  <section class="panel" id="ratesPanel" aria-labelledby="ratesTitle">
+    <div class="panel-head">
+      <h2 id="ratesTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.3 6.9 19l1.1-5.6L3.8 9.5l5.7-.7z"/></svg>မြန်မာမှာ အသုံးများဆုံး ငွေကြေးများ</h2>
+    </div>
+    <div class="grid" id="gridPopular"></div>
+  </section>
+
+  <section class="panel" id="searchPanel" aria-labelledby="searchTitle" hidden>
+    <div class="panel-head">
+      <h2 id="searchTitle">ရှာဖွေမှုရလဒ်</h2>
+    </div>
+    <div class="az-bar" id="azBar" role="navigation" aria-label="A မှ Z အက္ခရာ ခုန်ရန်"></div>
+    <div class="grid" id="gridSearch"></div>
+  </section>
+
+  <section class="panel" id="convPanel" aria-labelledby="convTitle">
+    <div class="panel-head">
+      <h2 id="convTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.5" y2="12.1"/><line x1="12" y1="12" x2="12" y2="12.1"/><line x1="15.5" y1="12" x2="15.5" y2="12.1"/><line x1="8.5" y1="15.5" x2="8.5" y2="15.6"/><line x1="12" y1="15.5" x2="12" y2="15.6"/><line x1="15.5" y1="15.5" x2="15.5" y2="15.6"/></svg>ငွေလဲတွက်စက်</h2>
+    </div>
+    <div class="panel-box">
+      <div class="detail-note" id="detailNote" tabindex="-1" hidden></div>
+      <div class="conv-grid">
+        <div class="field">
+          <label for="convCur">ငွေကြေး</label>
+          <input id="convSearch" class="conv-search" type="search" autocomplete="off" placeholder="ငွေကြေး စစ်ထုတ်ရန် — code / နာမည် / နိုင်ငံ" aria-label="ငွေကြေး စစ်ထုတ်ရန်" />
+          <div class="sel-row"><span id="convFlag"></span><select id="convCur"></select></div>
+        </div>
+        <button class="swap-btn" id="swapBtn" aria-label="အပြန်အလှန် လဲရန်" title="အပြန်အလှန် လဲရန်"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+        <div class="field">
+          <label for="convAmt" id="convAmtLabel">ပမာဏ</label>
+          <input id="convAmt" type="number" inputmode="decimal" min="0" value="100" />
+        </div>
+      </div>
+      <div class="conv-modes" role="group" aria-label="ဝယ်ဈေး ရောင်းဈေး ရွေးရန်">
+        <button id="cmBuy" aria-pressed="true">ဝယ်ဈေးနဲ့ တွက်မယ်</button>
+        <button id="cmSell" aria-pressed="false">ရောင်းဈေးနဲ့ တွက်မယ်</button>
+      </div>
+      <div class="conv-result" id="convResult"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="calcPanel" aria-labelledby="calcTitle">
+    <div class="panel-head">
+      <h2 id="calcTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.5" y2="12.1"/><line x1="12" y1="12" x2="12" y2="12.1"/><line x1="15.5" y1="12" x2="15.5" y2="12.1"/><line x1="8.5" y1="15.5" x2="8.5" y2="15.6"/><line x1="12" y1="15.5" x2="12" y2="15.6"/><line x1="15.5" y1="15.5" x2="15.5" y2="15.6"/></svg>အခြေခံ တွက်စက်</h2>
+      <p>အပေါင်း အနှုတ် အမြှောက် အစား — ရာခိုင်နှုန်းပါ တွက်လို့ရပါတယ်။ ကီးဘုတ်နဲ့လည်း ရိုက်လို့ရပါတယ်။</p>
+    </div>
+    <div class="panel-box calc-box">
+      <div class="calc-hist" id="calcHist" aria-live="polite"></div>
+      <div class="calc-disp num" id="calcDisp" role="status">0</div>
+      <div class="calc-keys" id="calcKeys" role="group" aria-label="တွက်စက် ခလုတ်များ">
+        <button type="button" data-k="C" class="util" aria-label="အားလုံး ရှင်းရန်">C</button>
+        <button type="button" data-k="back" class="util" aria-label="နောက်ဆုံး ဂဏန်း ဖျက်ရန်">⌫</button>
+        <button type="button" data-k="%" class="util" aria-label="ရာခိုင်နှုန်း">%</button>
+        <button type="button" data-k="/" class="op" aria-label="အစား">÷</button>
+        <button type="button" data-k="7">7</button>
+        <button type="button" data-k="8">8</button>
+        <button type="button" data-k="9">9</button>
+        <button type="button" data-k="*" class="op" aria-label="အမြှောက်">×</button>
+        <button type="button" data-k="4">4</button>
+        <button type="button" data-k="5">5</button>
+        <button type="button" data-k="6">6</button>
+        <button type="button" data-k="-" class="op" aria-label="အနှုတ်">−</button>
+        <button type="button" data-k="1">1</button>
+        <button type="button" data-k="2">2</button>
+        <button type="button" data-k="3">3</button>
+        <button type="button" data-k="+" class="op" aria-label="အပေါင်း">+</button>
+        <button type="button" data-k="neg" class="util" aria-label="အပေါင်း အနှုတ် ပြောင်းရန်">±</button>
+        <button type="button" data-k="0">0</button>
+        <button type="button" data-k="." >.</button>
+        <button type="button" data-k="=" class="eq" aria-label="အဖြေ">=</button>
+      </div>
+      <button type="button" class="calc-send" id="calcSend">အဖြေကို ငွေလဲတွက်စက်ထဲ ထည့်ရန် →</button>
+      <p class="calc-note">ဥပမာ — 100 + 25 % က 125 ဖြစ်ပါတယ်။ အဖြေကို ငွေလဲတွက်စက်ထဲ ထည့်ပြီး ရွေးထားတဲ့ ငွေကြေးနဲ့ ကျပ်ဈေး တွက်နိုင်ပါတယ်။</p>
+    </div>
+  </section>
+
+
+  <section class="panel" id="chartPanel" aria-labelledby="chartTitle">
+    <div class="panel-head">
+      <h2 id="chartTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4v15.5h16"/><line x1="8.5" y1="6" x2="8.5" y2="15"/><rect x="7" y="8.5" width="3" height="4.5"/><line x1="15" y1="4.5" x2="15" y2="13.5"/><rect x="13.5" y="6.5" width="3" height="5"/></svg>ဈေးနှုန်း အတက်အကျ ဂရပ်</h2>
+    </div>
+    <div class="panel-box">
+      <div class="tv-bar">
+        <div class="tv-info" id="tvInfo" aria-live="polite"></div>
+        <div class="tv-tools" role="group" aria-label="ဂရပ် အချိန်ကာလ ရွေးရန်">
+          <span class="tv-live" id="tvLiveBadge" role="status"><span class="live-dot sm" aria-hidden="true"></span><span id="tvLiveTxt">LIVE</span></span>
+          <button id="tfLive" aria-pressed="true">LIVE · တိုက်ရိုက်</button>
+          <button id="tfD" aria-pressed="false">1D · နေ့စဉ်</button>
+          <button id="tfW" aria-pressed="false">1W · အပတ်စဉ်</button>
+          <button id="tfM" aria-pressed="false">1M · လစဉ်</button>
+          <button id="tvReset" title="ဂရပ် အစအဆုံး ပြန်ကြည့်ရန်">⟲</button>
+          <button id="tvLw" type="button" title="ရွေးထားသော ငွေကြေးအတွက် Line ဂရပ် ဖွင့်ရန်">Line ဂရပ်</button>
+        </div>
+        <span class="tv-anchor num" id="tvAnchor"></span>
+        <span class="tv-reset-note" id="tvResetNote" role="status"></span>
+      </div>
+      <div id="tvChart"></div>
+      <div class="lw-wrap" id="lwWrap" hidden>
+        <div class="lw-bar">
+          <span class="lw-title">ရွေးထားသော အရာ — ဂရပ်</span>
+          <span class="lw-asset num" id="lwAsset"></span>
+          <button id="lwLine" type="button" aria-pressed="true">Line</button>
+          <button id="lwCandle" type="button" aria-pressed="false">Candle</button>
+        </div>
+        <div id="lwChart"></div>
+        <p class="lw-status" id="lwStatus" role="status">Crypto / စတော့ ကတ်ကို နှိပ်လိုက်ရင် ဒီမှာ ဂရပ် ပေါ်လာပါမယ်။</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="globalPanel" aria-labelledby="globalTitle">
+    <div class="panel-head">
+      <h2 id="globalTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.5 2.3 3.8 5.2 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.2-3.8-8.5S9.5 5.8 12 3.5z"/></svg>Global Live <span class="tv-live" role="status" aria-label="Live"><span class="live-dot sm" aria-hidden="true"></span>LIVE</span></h2>
+    </div>
+    <div class="grid global-grid" id="globalGrid"></div>
+    <div class="asset-tools">
+      <input id="glSearch" type="search" autocomplete="off" placeholder="Crypto ရှာရန် — BTC, SOL, USDT…" aria-label="Crypto ရှာရန်" />
+      <span class="pager"><button id="glPrev" type="button">‹ ရှေ့</button><span class="pg-info num" id="glPageInfo"></span><button id="glNext" type="button">နောက် ›</button></span>
+    </div>
+    <p class="asset-count" id="glCount" role="status"></p>
+    <p class="global-status" id="globalStatus" role="status">ချိတ်ဆက်နေပါသည်…</p>
+  </section>
+
+  <section class="panel" id="stockPanel" aria-labelledby="stockTitle">
+    <div class="panel-head">
+      <h2 id="stockTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 19 L10 11 L13.5 14.5 L20 5.5"/><path d="M14.5 5.5 H20 V11"/></svg>နိုင်ငံခြား စတော့များ <span class="tv-live" role="status" aria-label="Live"><span class="live-dot sm" aria-hidden="true"></span>LIVE</span></h2>
+      <p>အမေရိကန် NASDAQ / NYSE နံမည်ကြီး စတော့ ၂၀၀ ကျော် + S&amp;P 500 အညွှန်းကိန်း — စျေးအမှန်၊ တစ်နေရာတည်း။</p>
+    </div>
+    <div class="asset-tools">
+      <input id="stSearch" type="search" autocomplete="off" placeholder="စတော့ ရှာရန် — AAPL, Tesla, NVDA…" aria-label="စတော့ ရှာရန်" />
+      <span class="pager"><button id="stPrev" type="button">‹ ရှေ့</button><span class="pg-info num" id="stPageInfo"></span><button id="stNext" type="button">နောက် ›</button></span>
+    </div>
+    <p class="asset-count" id="stCount" role="status">စတော့ဈေးတွေ တောင်းနေပါတယ်…</p>
+    <div class="grid global-grid" id="stockGrid"></div>
+    <p class="global-status" id="stockStatus" role="status">စတော့ ၂၀၀ ကျော်ကို အသုတ်လိုက် တောင်းနေပါတယ် — ပထမအသုတ် တင်ပြီးတာနဲ့ မြင်ရပါမယ်။</p>
+  </section>
+
+
+  <section class="panel" aria-labelledby="tblTitle">
+    <div class="panel-head">
+      <h2 id="tblTitle"><svg class="h-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5"/><line x1="4" y1="9.7" x2="20" y2="9.7"/><line x1="4" y1="14.3" x2="20" y2="14.3"/><line x1="12" y1="5" x2="12" y2="19"/></svg>ဈေးနှုန်းဇယား</h2>
+    </div>
+    <div class="panel-box">
+      <table class="cmp">
+        <thead><tr>
+          <th>ငွေကြေး</th><th>Market ဝယ်</th><th>Market ရောင်း</th><th>Market ပြောင်းလဲမှု</th><th>Bank ဝယ်</th><th>Bank ရောင်း</th><th>ကွာဟချက်</th>
+        </tr></thead>
+        <tbody id="cmpBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="site-foot">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <div class="foot-brand"><svg class="foot-logo" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="38" fill="none" stroke="#e3b93e" stroke-width="6"/><text x="48" y="70" font-family="Arial,Helvetica,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#e3b93e">K</text><rect x="72" y="76" width="15" height="11" rx="2.5" transform="rotate(45 79.5 81.5)" fill="#e3b93e"/><rect x="94" y="99" width="18" height="12" rx="3" transform="rotate(45 103 105)" fill="#e3b93e"/></svg><span class="foot-word">KYAT<em>SCOPE</em></span></div>
+        <p>MMK ငွေလဲနှုန်းများကို တစ်နေရာတည်းတွင် ကြည့်ရှု၊ နှိုင်းယှဉ်၊ တွက်ချက်နိုင်ပါသည်။</p>
+      </div>
+      <nav class="foot-nav" aria-label="Footer လင့်ခ်များ">
+        <h3>လင့်ခ်များ</h3>
+        <a href="#ratesPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none"/></svg>ဈေးနှုန်းများ</a>
+        <a href="#convPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.5" y2="12.1"/><line x1="12" y1="12" x2="12" y2="12.1"/><line x1="15.5" y1="12" x2="15.5" y2="12.1"/><line x1="8.5" y1="15.5" x2="8.5" y2="15.6"/><line x1="12" y1="15.5" x2="12" y2="15.6"/><line x1="15.5" y1="15.5" x2="15.5" y2="15.6"/></svg>ငွေလဲတွက်စက်</a>
+        <a href="#chartPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4v15.5h16"/><line x1="8" y1="15" x2="8" y2="10"/><line x1="12.5" y1="15" x2="12.5" y2="6"/><line x1="17" y1="15" x2="17" y2="11"/></svg>ဂရပ်</a>
+        <a href="#searchBar" data-focus-search><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20.5" y1="20.5" x2="16.2" y2="16.2"/></svg>ရှာဖွေရန်</a>
+        <a href="#globalPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.5 2.3 3.8 5.2 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.2-3.8-8.5S9.5 5.8 12 3.5z"/></svg>Global Live</a>
+      </nav>
+      <div class="foot-note">
+        <h3>သတိပြုရန်</h3>
+        <p>ဈေးနှုန်းများသည် အချိန်နှင့်အမျှ ပြောင်းလဲနိုင်ပါသည် — ငွေမလဲမီ နောက်ဆုံးဈေးကို အတည်ပြုပါ။</p>
+      </div>
+    </div>
+    <div class="foot-bar"><span>© 2026 KyatScope</span><span class="foot-dot" aria-hidden="true">·</span><span>မြန်မာကျပ် ငွေလဲနှုန်းများ</span><span class="foot-dot" aria-hidden="true">·</span><span class="foot-attr">Crypto: Binance / CoinGecko · Stocks: Yahoo Finance · Stock logos: official company websites</span></div>
+  </footer>
+
+</div>
+
+  <script src="js/data01.js"></script>
+  <script src="js/hist01.js"></script>
+  <script src="js/hist02.js"></script>
+  <script src="js/hist03.js"></script>
+  <script src="js/hist04.js"></script>
+  <script src="js/hist05.js"></script>
+  <script src="js/hist06.js"></script>
+  <script src="js/app01.js"></script>
+  <script src="js/app02.js"></script>
+  <script src="js/app03.js"></script>
+  <script src="js/app04.js"></script>
+</body>
+</html>

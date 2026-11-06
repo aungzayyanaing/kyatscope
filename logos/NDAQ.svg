@@ -1,0 +1,41 @@
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 70 60" xml:space="preserve">
+      <style type="text/css">
+        .st0 {
+          fill: #0090BA;
+        }
+      </style>
+      <defs>
+        <linearGradient id="mask-gradient-123321414" gradientUnits="userSpaceOnUse" x2="0" y2="100%">
+          <stop offset="10%" stop-color="white" stop-opacity="0"></stop>
+          <stop offset="20%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="100%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="110%" stop-color="white" stop-opacity="0"></stop>
+        </linearGradient>
+        <linearGradient id="mask-gradient-243501487" gradientUnits="userSpaceOnUse" x2="0" y2="100%">
+          <stop offset="20%" stop-color="white" stop-opacity="0"></stop>
+          <stop offset="25%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="75%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="80%" stop-color="white" stop-opacity="0"></stop>
+        </linearGradient>
+        <linearGradient id="mask-gradient-21265406" gradientUnits="userSpaceOnUse" x2="0" y2="100%">
+          <stop offset="-10%" stop-color="white" stop-opacity="0"></stop>
+          <stop offset="0%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="80%" stop-color="white" stop-opacity="1"></stop>
+          <stop offset="90%" stop-color="white" stop-opacity="0"></stop>
+        </linearGradient>
+        <mask id="mask-123321414">
+          <rect class="rect-mask__first" x="0" y="-1" width="35" height="75" fill="url(#mask-gradient-123321414)"></rect>
+        </mask>
+        <mask id="mask-243501487">
+          <rect class="rect-mask__second" x="27" y="10" width="16" height="40" fill="url(#mask-gradient-243501487)"></rect>
+        </mask>
+        <mask id="mask-21265406">
+          <rect class="rect-mask__third" x="35" y="-10" width="35" height="75" fill="url(#mask-gradient-21265406)"></rect>
+        </mask>
+      </defs>
+      <path class="st0" mask="url(#mask-123321414)" d="M34.9,14.9L34.9,14.9c-1.2,0.1-2.3,0.9-2.7,2L16.7,59.6H0l15.5-42.7c0.4-1.1,1.5-2,2.8-2H34.9"></path>
+      <path class="st0" mask="url(#mask-243501487)" d="M33.6,44c-1.2,0-2.1-0.7-2.6-1.7l-3.3-9.2l5.7-15.7c0.1-0.3,0.3-0.6,0.4-0.7c0.5-0.7,1.3-1.2,2.3-1.2
+  c1.2,0,2.2,0.7,2.6,1.7l3.3,9.1l-5.7,15.7c-0.1,0.4-0.3,0.6-0.4,0.7C35.4,43.5,34.6,44,33.6,44z"></path>
+      <path class="st0" mask="url(#mask-21265406)" d="M35,44.6L35,44.6c1.2-0.1,2.1-0.9,2.5-2L53,0h16.7L54.1,42.7c-0.4,1.1-1.5,2-2.8,2H35"></path>
+
+    </svg>
