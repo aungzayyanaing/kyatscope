@@ -1,0 +1,30 @@
+name: Unzip KyatScope deploy
+on:
+  push:
+    paths:
+      - 'kyat-deploy2.zip'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract KyatScope deploy zip
+        run: |
+          unzip -o kyat-deploy2.zip
+          if [ -d kyat-deploy2 ]; then cp -a kyat-deploy2/. .; rm -rf kyat-deploy2; fi
+          if [ -d kyat-deploy ]; then cp -a kyat-deploy/. .; rm -rf kyat-deploy; fi
+          rm -f kyat-deploy2.zip
+          rm -rf .github
+          ls -la
+          echo "js files:"; ls js | wc -l
+          echo "logos files:"; ls logos | wc -l
+      - name: Commit extracted site
+        run: |
+          git config user.name "aungzayyanaing"
+          git config user.email "aungzayyanaing2@gmail.com"
+          git add -A
+          git commit -m "Update KyatScope site: index.html, js/ and logos/ (redeploy)"
+          git push
