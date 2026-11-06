@@ -703,7 +703,7 @@ function stockApplyResults(results){
       STOCK.rows[r.t] = r;
       var fi = STOCK.failedSyms.indexOf(r.t);
       if (fi >= 0) STOCK.failedSyms.splice(fi, 1);
-    } else if (STOCK.failedSyms.indexOf(r.t) < 0) STOCK.failedSyms.push(r.t);
+    } else if (!STOCK.rows[r.t] && STOCK.failedSyms.indexOf(r.t) < 0) STOCK.failedSyms.push(r.t);
   });
   STOCK.loaded = Object.keys(STOCK.rows).filter(function(k){ var r = STOCK.rows[k]; return r && r.ok; }).length;
   STOCK.failed = STOCK.failedSyms.length;
@@ -716,12 +716,24 @@ function stockSweep(){
   function worker(){
     if (idx >= batches.length) return Promise.resolve();
     var b = batches[idx++];
-    return stockFetchBatch(b).then(function(results){
-      stockApplyResults(results);
-      stockSaveCache();
-      renderStocks();
-      stockStatus();
-    }).then(worker);
+    /* A batch that fails ENTIRELY is usually a transient jina 429
+       (the page's own burst + the FX fetches share jina's budget):
+       retry it in place with a backoff instead of leaving all 20
+       symbols to the slow 30s retry loop. A partially-ok batch is
+       applied at once — only its missing symbols go to the loop. */
+    function attempt(n){
+      return stockFetchBatch(b).then(function(results){
+        var okCount = results.filter(function(r){ return r.ok; }).length;
+        if (okCount === 0 && n < 3){
+          return new Promise(function(res){ setTimeout(res, 5000 * n); }).then(function(){ return attempt(n + 1); });
+        }
+        stockApplyResults(results);
+        stockSaveCache();
+        renderStocks();
+        stockStatus();
+      });
+    }
+    return attempt(1).then(worker);
   }
   var workers = [];
   for (var w = 0; w < 3; w++) workers.push(worker());
@@ -979,20 +991,29 @@ function lwLoadData(asset, done){
       } else {
         /* Spark rows carry closes only: the line chart works now,
            and one on-demand v8/chart fetch upgrades this row to real
-           OHLC candles (and Day H/L) in the background. */
+           OHLC candles (and Day H/L) in the background. The first
+           attempt can fail (jina 429s while the page's own spark
+           burst is in flight) — retry up to 3 times, 15s apart, so
+           the Candle button does not stay disabled until a reload. */
         LW.candleData = null;
         if (!r.ohlcBusy){
           r.ohlcBusy = true;
-          stockFetchOne(asset.sym).then(function(fr){
-            r.ohlcBusy = false;
-            if (fr && fr.ok && fr.hist && fr.hist.length){
-              r.hist = fr.hist; r.ohlc = true;
-              r.high = fr.high; r.low = fr.low;
-              stockSaveCache();
-              if (LW.asset && LW.asset.sym === asset.sym) lwShow(LW.asset);
-              renderStocks();
-            }
-          });
+          (function upgrade(attempt){
+            stockFetchOne(asset.sym).then(function(fr){
+              if (fr && fr.ok && fr.hist && fr.hist.length){
+                r.ohlcBusy = false;
+                r.hist = fr.hist; r.ohlc = true;
+                r.high = fr.high; r.low = fr.low;
+                stockSaveCache();
+                if (LW.asset && LW.asset.sym === asset.sym) lwShow(LW.asset);
+                renderStocks();
+              } else if (attempt < 3){
+                setTimeout(function(){ upgrade(attempt + 1); }, 15000);
+              } else {
+                r.ohlcBusy = false;
+              }
+            });
+          })(1);
         }
       }
     }
@@ -1297,31 +1318,4 @@ function parseMarketRate(html){
      parseEmbeddedJsonRate applies. Refusing it here once left the
      page on a stale snapshot for a whole day. */
   return embedded;
-}
-function parseAnyRate(text){
-  if (!text) return null;
-  return parseMarketRate(text);
-}
-function firstParsed(urls){
-  return new Promise(function(resolve){
-    var pending = urls.length, settled = false;
-    if (!pending){ resolve(null); return; }
-    var race = ("AbortController" in window) ? new AbortController() : null;
-    function settle(v){
-      if (settled) return;
-      settled = true;
-      /* Cancel the relays still in flight: a request cancelled on
-         purpose ends quietly, instead of failing later on its own. */
-      if (race){ try { race.abort(); } catch (e) {} }
-      resolve(v);
-    }
-    urls.forEach(function(u, idx){
-      fetchText(u, 15000, race ? race.signal : null).then(function(t){
-        var r = null;
-        try { r = parseAnyRate(t); } catch (e) { r = null; }
-        if (r) settle({ rate: r, relay: idx });
-        else if (--pending === 0) settle(null);
-      }, function(){ if (--pending === 0) settle(null); });
-    });
-  });
 }

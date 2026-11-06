@@ -1,3 +1,30 @@
+function parseAnyRate(text){
+  if (!text) return null;
+  return parseMarketRate(text);
+}
+function firstParsed(urls){
+  return new Promise(function(resolve){
+    var pending = urls.length, settled = false;
+    if (!pending){ resolve(null); return; }
+    var race = ("AbortController" in window) ? new AbortController() : null;
+    function settle(v){
+      if (settled) return;
+      settled = true;
+      /* Cancel the relays still in flight: a request cancelled on
+         purpose ends quietly, instead of failing later on its own. */
+      if (race){ try { race.abort(); } catch (e) {} }
+      resolve(v);
+    }
+    urls.forEach(function(u, idx){
+      fetchText(u, 15000, race ? race.signal : null).then(function(t){
+        var r = null;
+        try { r = parseAnyRate(t); } catch (e) { r = null; }
+        if (r) settle({ rate: r, relay: idx });
+        else if (--pending === 0) settle(null);
+      }, function(){ if (--pending === 0) settle(null); });
+    });
+  });
+}
 function fetchPairRate(c){
   var all = relayUrls(marketPageUrl(MARKET_PAGES[c.code]));
   var urls = relayOrder.map(function(i){ return all[i]; });
