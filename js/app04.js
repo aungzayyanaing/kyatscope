@@ -91,6 +91,40 @@ function applyMarketRate(c, r, baseDay){
 }
 function isoOfDayId(d){ return d.slice(0,4) + "-" + d.slice(4,6) + "-" + d.slice(6,8); }
 
+/* Retry just the pairs that failed (a partial sweep success must
+   not leave the headline pair stale until the 30-minute interval:
+   verified live 2026-11-06 — USD failed first in the boot burst
+   while THB/EUR/GBP succeeded, so no retry fired and USD sat on
+   its snapshot rate). Each round re-fetches only the still-failed
+   pairs; up to 3 rounds, 20s apart. */
+function retryMarketPairs(list, attempt){
+  var baseDay = SNAP_DAY, newestDay = baseDay, applied = false, still = [];
+  var chain = Promise.resolve();
+  list.forEach(function(c){
+    chain = chain.then(function(){
+      return fetchPairRate(c).then(function(r){
+        c.mTried = true;
+        try {
+          if (!r){ still.push(c); return; }
+          if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2){ still.push(c); return; }
+          if (r.dayId > newestDay) newestDay = r.dayId;
+          if (applyMarketRate(c, r, baseDay)){
+            applied = true;
+            renderConverter(); render(); renderTable();
+          }
+        } catch (e) { still.push(c); }
+      });
+    });
+  });
+  chain.then(function(){
+    if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
+    if (applied) refreshAll();
+    if (still.length > 0 && attempt < 3){
+      setTimeout(function(){ retryMarketPairs(still, attempt + 1); }, 20000);
+    }
+  }).catch(function(){ /* a failed retry round stays silent */ });
+}
+
 function checkMarketUpdate(){
   if (marketBusy) return;
   var now = Date.now();
@@ -98,7 +132,7 @@ function checkMarketUpdate(){
   marketBusy = true; lastMarketCheck = now;
   var status = document.getElementById("updateStatus");
   var baseDay = AS_OF.replace(/-/g, "");
-  var applied = false, anyOk = false, newestDay = baseDay;
+  var applied = false, anyOk = false, newestDay = baseDay, failedPairs = [];
   var chain = Promise.resolve();
   /* The selected currency (and the other core pairs) go first: their
      rates are the ones on screen, so they must refresh in seconds,
@@ -118,8 +152,8 @@ function checkMarketUpdate(){
            below can stop waiting on it. */
         c.mTried = true;
         try {
-          if (!r) return;
-          if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2) return;
+          if (!r){ failedPairs.push(c); return; }
+          if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2){ failedPairs.push(c); return; }
           anyOk = true;
           if (r.dayId > newestDay) newestDay = r.dayId;
           if (applyMarketRate(c, r, baseDay)){
@@ -147,7 +181,13 @@ function checkMarketUpdate(){
     if (!anyOk){
       lastMarketCheck = 0;
       if (marketRetries < 3){ marketRetries++; setTimeout(checkMarketUpdate, 20000); }
-    } else marketRetries = 0;
+    } else {
+      marketRetries = 0;
+      /* Partial success: retry ONLY the pairs that failed (usually
+         the first one, USD, hit by the boot burst) — otherwise the
+         headline rate sits stale until the 30-minute interval. */
+      if (failedPairs.length > 0) setTimeout(function(){ retryMarketPairs(failedPairs, 1); }, 20000);
+    }
     if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
     if (applied) refreshAll();
     if (status){
