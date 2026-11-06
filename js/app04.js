@@ -124,7 +124,15 @@ function checkMarketUpdate(){
           if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2) return;
           anyOk = true;
           if (r.dayId > newestDay) newestDay = r.dayId;
-          if (applyMarketRate(c, r, baseDay)) applied = true;
+          if (applyMarketRate(c, r, baseDay)){
+            applied = true;
+            /* Re-render NOW, not at sweep end: the converter's
+               per-currency gate opens the moment this currency is
+               tried, but nothing re-rendered it until the whole
+               sweep ended (minutes) — the loading note sat on
+               screen long after USD's own fetch had resolved. */
+            renderConverter(); render(); renderTable();
+          }
         } catch (e) { /* one bad pair never breaks the whole check */ }
       });
     });
@@ -205,6 +213,56 @@ function extractCurrenciesJson(text){
   }
   return null;
 }
+/* Reader for the aggregate page as returned by jina: the raw HTML's
+   embedded JSON ("currencies":[...) is STRIPPED by jina's markdown
+   conversion (verified 2026-11-06: 0 occurrences in jina's mmk
+   output), so extractCurrenciesJson can never succeed via jina —
+   and allorigins/codetabs 522 for EG Currency. But jina's markdown
+   DOES carry every currency's rates in a clean table form:
+     2026-11-06
+     ### USD/MMK
+     [Bank— 0.00% Buy 2,105.25 Sell 2,094.75](...)
+     [Market— 0.00% Buy 4,912.66 Sell 4,863.53](...)
+   This parses that table into the same shape extractCurrenciesJson
+   returns, so the aggregate check works off ONE jina request.
+   The markdown carries the change PERCENT (▲/▼/— + number) but no
+   absolute change: change is left undefined so applyAggSource
+   preserves the stored value instead of zeroing it. */
+function parseAggMarkdown(text){
+  if (!text || text.length < 500) return null;
+  var dm = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!dm) return null;
+  var dayId = dm[1] + dm[2] + dm[3];
+  function src(block, label){
+    var m = block.match(new RegExp("\\[" + label + "\\s*([\\u2014\\u25B2\\u25BC])?\\s*([\\d.]+)%\\s*Buy\\s*([\\d,]+(?:\\.\\d+)?)\\s*Sell\\s*([\\d,]+(?:\\.\\d+)?)\\]"));
+    if (!m) return null;
+    var arrow = m[1] || "";
+    var sign = arrow === "▼" ? -1 : 1;
+    var pct = parseFloat(m[2]) || 0;
+    return { buy: m[3], sell: m[4], change: undefined, changePercent: sign * pct / 100 };
+  }
+  var list = [];
+  var re = /###\s*([A-Z0-9]{2,4})\/MMK/g, m;
+  var heads = [];
+  while ((m = re.exec(text)) !== null) heads.push({ code: m[1], index: m.index });
+  for (var h = 0; h < heads.length; h++){
+    var code = heads[h].code;
+    /* Slice to the next heading only — a fixed 600-char window
+       could swallow the NEXT currency's Bank/Market line. */
+    var end = (h + 1 < heads.length) ? heads[h + 1].index : heads[h].index + 600;
+    var block = text.slice(heads[h].index, end);
+    var bank = src(block, "Bank"), market = src(block, "Market");
+    if (!bank && !market) continue;
+    list.push({ code: code, sources: { bank: bank, market: market } });
+  }
+  /* jina's markdown carries only the page's visible table (24
+     currencies here) — not the full 102 — so the threshold is
+     lower than the JSON path's, but USD must be present or the
+     parse is not trusted. All 7 core pairs are in the 24. */
+  if (list.length < 20) return null;
+  if (!list.some(function(e){ return e.code === "USD"; })) return null;
+  return { list: list, dayId: dayId };
+}
 function firstAggregate(urls){
   return new Promise(function(resolve){
     var pending = urls.length, settled = false;
@@ -220,6 +278,9 @@ function firstAggregate(urls){
       fetchText(u, 15000, race ? race.signal : null).then(function(t){
         var r = null;
         try { r = extractCurrenciesJson(t); } catch (e) { r = null; }
+        /* jina returns markdown, not the raw HTML: fall back to the
+           markdown table parser (same shape, same threshold). */
+        if (!r){ try { r = parseAggMarkdown(t); } catch (e) { r = null; } }
         if (r && r.list && r.list.length > 50) settle({ data: r, relay: idx });
         else if (--pending === 0) settle(null);
       }, function(){ if (--pending === 0) settle(null); });
@@ -237,8 +298,8 @@ function applyAggSource(c, srcName, s, dayId){
     c[srcName === "market" ? "mDay" : "bDay"] = dayId;
     if (dayId > LATEST_DAY) LATEST_DAY = dayId;
   }
-  var chg = parseFloat(s.change) || 0;
-  var pct = round2((parseFloat(s.changePercent) || 0) * 100);
+  var chg = (s.change === undefined || s.change === null) ? (cur ? cur.chg : 0) : (parseFloat(s.change) || 0);
+  var pct = (s.changePercent === undefined || s.changePercent === null) ? (cur ? cur.pct : 0) : round2((parseFloat(s.changePercent) || 0) * 100);
   var changed = false;
   if (!cur){
     c[srcName] = { buy: round2(buy), sell: round2(sell), chg: round2(chg), pct: pct };
