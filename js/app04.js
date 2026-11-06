@@ -1,3 +1,114 @@
+function fetchPairRate(c){
+  var all = relayUrls(marketPageUrl(MARKET_PAGES[c.code]));
+  var urls = relayOrder.map(function(i){ return all[i]; });
+  return firstParsed(urls).then(function(res){
+    if (!res) return null;
+    var won = relayOrder[res.relay];
+    relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
+    return res.rate;
+  }).catch(function(){ return null; });
+}
+function applyMarketRate(c, r, baseDay){
+  if (r.dayId < baseDay) return false;
+  /* The source published on r.dayId: stamp it even when the values
+     are unchanged, so the converter can tell this rate is current. */
+  c.mDay = r.dayId;
+  if (r.dayId > LATEST_DAY) LATEST_DAY = r.dayId;
+  var m = c.market;
+  /* sanity band: a real daily move never halves or doubles the rate;
+     anything outside is a corrupted read (e.g. a bank value), skip it */
+  if (r.buy < m.buy * 0.5 || r.buy > m.buy * 2) return false;
+  var differs = Math.abs(m.buy - r.buy) >= 0.005 || Math.abs(m.sell - r.sell) >= 0.005;
+  if (!differs && r.dayId === baseDay) return false;
+  m.buy = round2(r.buy); m.sell = round2(r.sell);
+  m.chg = round2(r.chg); m.pct = round2(r.pct);
+  /* chart: the history series tracks the buy price — replace the
+     same-day point or append the new day, then the chart follows */
+  var key = c.code + "_market", pt = r.dayId + ":" + m.buy;
+  var parts = HISTORY[key] ? HISTORY[key].split(",") : [], found = false;
+  for (var i = 0; i < parts.length; i++){
+    if (parts[i].indexOf(r.dayId + ":") === 0){ parts[i] = pt; found = true; break; }
+  }
+  if (!found) parts.push(pt);
+  HISTORY[key] = parts.join(",");
+  return true;
+}
+function isoOfDayId(d){ return d.slice(0,4) + "-" + d.slice(4,6) + "-" + d.slice(6,8); }
+
+function checkMarketUpdate(){
+  if (marketBusy) return;
+  var now = Date.now();
+  if (lastMarketCheck && now - lastMarketCheck < 5 * 60 * 1000) return;
+  marketBusy = true; lastMarketCheck = now;
+  var status = document.getElementById("updateStatus");
+  var baseDay = AS_OF.replace(/-/g, "");
+  var applied = false, anyOk = false, newestDay = baseDay;
+  var chain = Promise.resolve();
+  /* The selected currency (and the other core pairs) go first: their
+     rates are the ones on screen, so they must refresh in seconds,
+     not after the whole 100+ currency sweep. */
+  var order = [], seenM = {};
+  [selected].concat(Object.keys(CORE7)).forEach(function(code){
+    var cc = byCode(code);
+    if (cc && !seenM[cc.code]){ seenM[cc.code] = 1; order.push(cc); }
+  });
+  DATA.forEach(function(c){ if (!seenM[c.code]) order.push(c); });
+  order.forEach(function(c){
+    chain = chain.then(function(){
+      if (!MARKET_PAGES[c.code]) return;
+      return fetchPairRate(c).then(function(r){
+        try {
+          if (!r) return;
+          if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2) return;
+          anyOk = true;
+          if (r.dayId > newestDay) newestDay = r.dayId;
+          if (applyMarketRate(c, r, baseDay)) applied = true;
+        } catch (e) { /* one bad pair never breaks the whole check */ }
+      });
+    });
+  });
+  chain.then(function(){
+    marketBusy = false;
+    fxFirstSettled = true;
+    /* A sweep in which every relay failed must not burn the
+       5-minute throttle: clear the stamp so the next tab-visible
+       or interval check retries immediately instead of leaving
+       the page on a stale snapshot for the rest of the guard. */
+    if (!anyOk) lastMarketCheck = 0;
+    if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
+    if (applied) refreshAll();
+    if (status){
+      var nowT = new Date();
+      var p2 = function(n){ return ("0" + n).slice(-2); };
+      var stamp = " · နောက်ဆုံးအပ်ဒိတ် " + p2(nowT.getHours()) + ":" + p2(nowT.getMinutes());
+      if (applied) status.textContent = "ဈေးအသစ် ရပါပြီ — " + AS_OF + stamp;
+      else if (anyOk) status.textContent = "နောက်ဆုံးဈေး ဖြစ်နေပါပြီ။" + stamp;
+      else status.textContent = "နောက်ဆုံးအပ်ဒိတ် — " + AS_OF + " (အသစ် တောင်းမရသေးပါ — မှတ်တမ်း ဈေးကို ပြထားသည်)";
+    }
+  }).catch(function(){
+    /* Silent by design: a failed check keeps the rates already on
+       screen, clears the busy guard so the next scheduled check can
+       still run, and leaves the console untouched. */
+    marketBusy = false;
+    fxFirstSettled = true;
+  });
+}
+
+/* ---------- Aggregate update: every currency at once ----------
+   One page lists every currency quoted in MMK together with both of
+   its rates (bank and market). Fetching that single page through the
+   same relays refreshes all 100+ currencies in one pass: bank rates
+   for every currency, plus market rates for the extended set — the
+   seven core pairs keep their own visible-block market check above.
+   A newer day advances the as-of date, changed rates update the
+   stored history points, and one refresh moves cards, converter,
+   table, ticker and chart together. Silent on failure: the rates
+   already on screen stay exactly as they are. */
+var aggBusy = false, lastAggCheck = 0;
+/* Stale-first-paint guard: until the first live FX sweep settles
+   (success or failure), the converter must not show the baked
+   2026-10-30 snapshot rate as if it were today's rate. */
+var fxFirstSettled = false;
 var CORE7 = { USD:1, THB:1, CNY:1, JPY:1, KRW:1, VND:1, EUR:1 };
 function extractCurrenciesJson(text){
   if (!text || text.length < 500) return null;

@@ -626,7 +626,10 @@ function yahooFetchJSON(url){
   });
 }
 function stockFetchOne(t){
-  var url = "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(t) + "?range=5d&interval=1d&includePrePost=false";
+  /* On-demand single-symbol v8/chart fetch: only used to upgrade a
+     spark row to real OHLC candles when its chart is opened. Yahoo
+     wants BRK-B, not BRK.B. */
+  var url = "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(yahooSym(t)) + "?range=5d&interval=1d&includePrePost=false";
   return yahooFetchJSON(url).then(function(j){
     var res = j && j.chart && j.chart.result && j.chart.result[0];
     var meta = res && res.meta;
@@ -647,58 +650,90 @@ function stockFetchOne(t){
         }
       }
     } catch (e) { hist = null; }
-    return { t:t, ok:true, price:price, pct:pct, high:(meta.regularMarketDayHigh || price), low:(meta.regularMarketDayLow || price), prev:prev, hist:hist, at:Date.now() };
+    return { t:t, ok:true, price:price, pct:pct, high:(meta.regularMarketDayHigh || price), low:(meta.regularMarketDayLow || price), prev:prev, hist:hist, ohlc:true, at:Date.now() };
   }).catch(function(){ return { t:t, ok:false }; });
 }
-function stockPool(symbols, limit, gapMs){
-  /* gapMs paces request STARTS (shared throttle): jina answers
-     ~35 rapid requests, then 429s — so the first pages burst and
-     the rest of the sweep is staggered instead of hammering. */
-  var idx = 0, out = [], nextStart = 0;
-  function paced(t){
-    var now = Date.now();
-    var wait = Math.max(0, nextStart - now);
-    nextStart = Math.max(now, nextStart) + (gapMs || 0);
-    if (!wait) return stockFetchOne(t);
-    return new Promise(function(res){ setTimeout(function(){ res(stockFetchOne(t)); }, wait); });
-  }
+/* ---------- Stock feed: Yahoo spark bulk endpoint ----------
+   The per-symbol v8/chart feed (237 separate requests through jina)
+   never got past ~10% in 3.5 minutes in real browsers (verified
+   2026-11-06: 23/237) — jina's burst budget (~35 rapid requests) is
+   blown by the page's own burst, then every symbol burns its relay
+   timeouts. The spark endpoint returns up to 20 symbols in ONE
+   request (verified 2026-11-06: 20 symbols via jina in <1s), so the
+   whole 237-symbol list costs 12 requests instead of 237. Spark
+   gives closes only (no OHLC): list price/pct/line-history come from
+   spark, and the candle chart fetches the single symbol's v8/chart
+   on demand (see lwLoadData). Yahoo wants BRK-B, not BRK.B. */
+function yahooSym(t){ return t === "BRK.B" ? "BRK-B" : t; }
+function sparkRow(t, v){
+  if (!v || !(v.fulldayPrice > 0)) return { t:t, ok:false };
+  var hist = null;
+  try {
+    var ts = v.timestamp || [], cl = v.close || [];
+    if (ts.length && cl.length){
+      hist = [];
+      for (var i = 0; i < ts.length; i++){
+        if (cl[i] !== null && cl[i] !== undefined) hist.push({ time:ts[i], open:cl[i], high:cl[i], low:cl[i], close:cl[i] });
+      }
+    }
+  } catch (e) { hist = null; }
+  return { t:t, ok:true, price:v.fulldayPrice, pct:(typeof v.fulldayChangePercent === "number" ? v.fulldayChangePercent : 0), prev:(v.chartPreviousClose || 0), high:null, low:null, hist:hist, ohlc:false, at:Date.now() };
+}
+function stockFetchBatch(syms){
+  var q = syms.map(function(t){ return encodeURIComponent(yahooSym(t)); }).join(",");
+  var url = "https://query1.finance.yahoo.com/v8/finance/spark?symbols=" + q + "&range=5d&interval=1d";
+  return yahooFetchJSON(url).then(function(j){
+    var out = [];
+    syms.forEach(function(t){
+      var v = j && j[yahooSym(t)];
+      out.push(sparkRow(t, v));
+    });
+    return out;
+  }).catch(function(){
+    return syms.map(function(t){ return { t:t, ok:false }; });
+  });
+}
+/* Single source of truth for the counters: loaded = rows with a good
+   price, failed = the deduped failed-symbol set. (The old code kept
+   separate ++/-- counters that drifted — the live footer once read
+   17 loaded + 228 failed = 245 out of 237.) */
+function stockApplyResults(results){
+  results.forEach(function(r){
+    if (r.ok){
+      STOCK.rows[r.t] = r;
+      var fi = STOCK.failedSyms.indexOf(r.t);
+      if (fi >= 0) STOCK.failedSyms.splice(fi, 1);
+    } else if (STOCK.failedSyms.indexOf(r.t) < 0) STOCK.failedSyms.push(r.t);
+  });
+  STOCK.loaded = Object.keys(STOCK.rows).filter(function(k){ var r = STOCK.rows[k]; return r && r.ok; }).length;
+  STOCK.failed = STOCK.failedSyms.length;
+}
+function stockSweep(){
+  if (STOCK.done) return;
+  var batches = [];
+  for (var i = 0; i < STOCK_LIST.length; i += 20) batches.push(STOCK_LIST.slice(i, i + 20).map(function(e){ return e[0]; }));
+  var idx = 0;
   function worker(){
-    if (idx >= symbols.length) return Promise.resolve();
-    var t = symbols[idx++];
-    return paced(t).then(function(r){ out.push(r); }).then(worker);
+    if (idx >= batches.length) return Promise.resolve();
+    var b = batches[idx++];
+    return stockFetchBatch(b).then(function(results){
+      stockApplyResults(results);
+      stockSaveCache();
+      renderStocks();
+      stockStatus();
+    }).then(worker);
   }
   var workers = [];
-  for (var i = 0; i < limit; i++) workers.push(worker());
-  return Promise.all(workers).then(function(){ return out; });
-}
-function stockRound(){
-  if (STOCK.done) return;
-  var next = STOCK_LIST.slice(STOCK.attempted, STOCK.attempted + 20).map(function(e){ return e[0]; });
-  if (!next.length){ STOCK.done = true; stockStatus(); return; }
-  STOCK.attempted += next.length;
-  /* First two rounds (the visible first page) burst at full speed;
-     the rest of the sweep is staggered so jina's ~35-request burst
-     budget is not blown on every round. */
-  var burst = STOCK.attempted <= 40;
-  stockPool(next, burst ? 10 : 6, burst ? 0 : 150).then(function(results){
-    results.forEach(function(r){
-      if (r.ok){ if (!STOCK.rows[r.t]) STOCK.loaded++; STOCK.rows[r.t] = r; }
-      else { STOCK.failed++; STOCK.failedSyms.push(r.t); }
-    });
-    stockSaveCache();
-    renderStocks();
+  for (var w = 0; w < 3; w++) workers.push(worker());
+  Promise.all(workers).then(function(){
+    STOCK.done = true;
+    STOCK.attempted = STOCK_LIST.length;
     stockStatus();
-    if (STOCK.attempted < STOCK_LIST.length){
-      STOCK.batchTimer = setTimeout(stockRound, 2000);
-    } else {
-      STOCK.done = true;
-      stockStatus();
-      STOCK.refreshTimer = setInterval(stockRefreshVisible, 60000);
-      /* Retry pass for the symbols that failed (jina 429s are
-         transient — the budget refills) — 30s after the first sweep,
-         then every 30s until everything is loaded. */
-      if (STOCK.failedSyms.length) STOCK.retryTimer = setTimeout(stockRetryFailed, 30000);
-    }
+    STOCK.refreshTimer = setInterval(stockRefreshVisible, 60000);
+    /* Retry pass for the symbols that failed (jina 429s are
+       transient — the budget refills) — 30s after the first sweep,
+       then every 30s until everything is loaded. */
+    if (STOCK.failedSyms.length) STOCK.retryTimer = setTimeout(stockRetryFailed, 30000);
   });
 }
 function stockSaveCache(){
@@ -717,12 +752,9 @@ function stockLoadCache(){
 }
 function stockRetryFailed(){
   var syms = STOCK.failedSyms.slice(0, 20);
-  STOCK.failedSyms = STOCK.failedSyms.slice(20);
   if (!syms.length) return;
-  stockPool(syms, 6, 150).then(function(results){
-    results.forEach(function(r){
-      if (r.ok){ if (!STOCK.rows[r.t]) STOCK.loaded++; STOCK.rows[r.t] = r; STOCK.failed--; }
-    });
+  stockFetchBatch(syms).then(function(results){
+    stockApplyResults(results);
     stockSaveCache();
     renderStocks();
     stockStatus();
@@ -739,8 +771,15 @@ function stockRefreshVisible(){
   var now = Date.now();
   var due = slice.filter(function(t){ var r = STOCK.rows[t]; return !r || (now - (r.at || 0) > 60000); });
   if (!due.length) return;
-  stockPool(due, 10).then(function(results){
-    results.forEach(function(r){ if (r.ok){ STOCK.rows[r.t] = r; } });
+  /* Visible page = 24 symbols: two spark batches at most. */
+  var batches = [];
+  for (var i = 0; i < due.length; i += 20) batches.push(due.slice(i, i + 20));
+  var chain = Promise.resolve();
+  batches.forEach(function(b){
+    chain = chain.then(function(){ return stockFetchBatch(b).then(function(results){ stockApplyResults(results); }); });
+  });
+  chain.then(function(){
+    stockSaveCache();
     renderStocks();
     stockStatus();
   });
@@ -804,7 +843,7 @@ function renderStocks(){
     return '<article class="gl-card asset-card' + (isSP ? " sp-card" : "") + sel + '" data-sym="' + t + '" tabindex="0" role="button" aria-label="' + name + ' ဂရပ်ကြည့်ရန်"><div class="gl-top">' + stockLogoHTML(t) +
       '<div class="gl-names"><span class="nm">' + name + '</span><span class="cd">' + (isSP ? "INDEX · S&P 500" : t + " · NASDAQ / NYSE") + '</span></div></div>' +
       '<div class="gl-price num"><span class="val">' + gFmt(r.price, dec) + '</span> <span class="unit">USD</span></div>' +
-      '<div class="gl-foot">' + glTrendHTML(r.pct) + '<span class="gl-range num">Day H ' + gFmt(r.high, dec) + " · L " + gFmt(r.low, dec) + "</span></div></article>";
+      '<div class="gl-foot">' + glTrendHTML(r.pct) + '<span class="gl-range num">Day H ' + (r.high != null ? gFmt(r.high, dec) : "—") + " · L " + (r.low != null ? gFmt(r.low, dec) : "—") + "</span></div></article>";
   }).join("");
   grid.querySelectorAll(".asset-card[data-sym]").forEach(function(card){
     var open = function(){
@@ -830,7 +869,7 @@ function renderStocks(){
   if (nx) nx.addEventListener("click", function(){ STOCK.page++; renderStocks(); stockRefreshVisible(); });
   renderStocks();
   stockStatus();
-  setTimeout(stockRound, 800);
+  setTimeout(stockSweep, 800);
 })();
 
 /* ---------- Lightweight Charts (TradingView) — selected asset ----------
@@ -935,7 +974,27 @@ function lwLoadData(asset, done){
     var r = STOCK.rows[asset.sym];
     if (r && r.hist && r.hist.length){
       LW.lineData = r.hist.map(function(h){ return { time: h.time, value: h.close }; });
-      LW.candleData = r.hist.map(function(h){ return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close }; });
+      if (r.ohlc){
+        LW.candleData = r.hist.map(function(h){ return { time: h.time, open: h.open, high: h.high, low: h.low, close: h.close }; });
+      } else {
+        /* Spark rows carry closes only: the line chart works now,
+           and one on-demand v8/chart fetch upgrades this row to real
+           OHLC candles (and Day H/L) in the background. */
+        LW.candleData = null;
+        if (!r.ohlcBusy){
+          r.ohlcBusy = true;
+          stockFetchOne(asset.sym).then(function(fr){
+            r.ohlcBusy = false;
+            if (fr && fr.ok && fr.hist && fr.hist.length){
+              r.hist = fr.hist; r.ohlc = true;
+              r.high = fr.high; r.low = fr.low;
+              stockSaveCache();
+              if (LW.asset && LW.asset.sym === asset.sym) lwShow(LW.asset);
+              renderStocks();
+            }
+          });
+        }
+      }
     }
     done(!!(LW.lineData && LW.lineData.length));
     return;
@@ -1263,114 +1322,3 @@ function firstParsed(urls){
     });
   });
 }
-function fetchPairRate(c){
-  var all = relayUrls(marketPageUrl(MARKET_PAGES[c.code]));
-  var urls = relayOrder.map(function(i){ return all[i]; });
-  return firstParsed(urls).then(function(res){
-    if (!res) return null;
-    var won = relayOrder[res.relay];
-    relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
-    return res.rate;
-  }).catch(function(){ return null; });
-}
-function applyMarketRate(c, r, baseDay){
-  if (r.dayId < baseDay) return false;
-  /* The source published on r.dayId: stamp it even when the values
-     are unchanged, so the converter can tell this rate is current. */
-  c.mDay = r.dayId;
-  if (r.dayId > LATEST_DAY) LATEST_DAY = r.dayId;
-  var m = c.market;
-  /* sanity band: a real daily move never halves or doubles the rate;
-     anything outside is a corrupted read (e.g. a bank value), skip it */
-  if (r.buy < m.buy * 0.5 || r.buy > m.buy * 2) return false;
-  var differs = Math.abs(m.buy - r.buy) >= 0.005 || Math.abs(m.sell - r.sell) >= 0.005;
-  if (!differs && r.dayId === baseDay) return false;
-  m.buy = round2(r.buy); m.sell = round2(r.sell);
-  m.chg = round2(r.chg); m.pct = round2(r.pct);
-  /* chart: the history series tracks the buy price — replace the
-     same-day point or append the new day, then the chart follows */
-  var key = c.code + "_market", pt = r.dayId + ":" + m.buy;
-  var parts = HISTORY[key] ? HISTORY[key].split(",") : [], found = false;
-  for (var i = 0; i < parts.length; i++){
-    if (parts[i].indexOf(r.dayId + ":") === 0){ parts[i] = pt; found = true; break; }
-  }
-  if (!found) parts.push(pt);
-  HISTORY[key] = parts.join(",");
-  return true;
-}
-function isoOfDayId(d){ return d.slice(0,4) + "-" + d.slice(4,6) + "-" + d.slice(6,8); }
-
-function checkMarketUpdate(){
-  if (marketBusy) return;
-  var now = Date.now();
-  if (lastMarketCheck && now - lastMarketCheck < 5 * 60 * 1000) return;
-  marketBusy = true; lastMarketCheck = now;
-  var status = document.getElementById("updateStatus");
-  var baseDay = AS_OF.replace(/-/g, "");
-  var applied = false, anyOk = false, newestDay = baseDay;
-  var chain = Promise.resolve();
-  /* The selected currency (and the other core pairs) go first: their
-     rates are the ones on screen, so they must refresh in seconds,
-     not after the whole 100+ currency sweep. */
-  var order = [], seenM = {};
-  [selected].concat(Object.keys(CORE7)).forEach(function(code){
-    var cc = byCode(code);
-    if (cc && !seenM[cc.code]){ seenM[cc.code] = 1; order.push(cc); }
-  });
-  DATA.forEach(function(c){ if (!seenM[c.code]) order.push(c); });
-  order.forEach(function(c){
-    chain = chain.then(function(){
-      if (!MARKET_PAGES[c.code]) return;
-      return fetchPairRate(c).then(function(r){
-        try {
-          if (!r) return;
-          if (r.buy < c.market.buy * 0.5 || r.buy > c.market.buy * 2) return;
-          anyOk = true;
-          if (r.dayId > newestDay) newestDay = r.dayId;
-          if (applyMarketRate(c, r, baseDay)) applied = true;
-        } catch (e) { /* one bad pair never breaks the whole check */ }
-      });
-    });
-  });
-  chain.then(function(){
-    marketBusy = false;
-    fxFirstSettled = true;
-    /* A sweep in which every relay failed must not burn the
-       5-minute throttle: clear the stamp so the next tab-visible
-       or interval check retries immediately instead of leaving
-       the page on a stale snapshot for the rest of the guard. */
-    if (!anyOk) lastMarketCheck = 0;
-    if (newestDay > baseDay) setAsOf(isoOfDayId(newestDay));
-    if (applied) refreshAll();
-    if (status){
-      var nowT = new Date();
-      var p2 = function(n){ return ("0" + n).slice(-2); };
-      var stamp = " · နောက်ဆုံးအပ်ဒိတ် " + p2(nowT.getHours()) + ":" + p2(nowT.getMinutes());
-      if (applied) status.textContent = "ဈေးအသစ် ရပါပြီ — " + AS_OF + stamp;
-      else if (anyOk) status.textContent = "နောက်ဆုံးဈေး ဖြစ်နေပါပြီ။" + stamp;
-      else status.textContent = "နောက်ဆုံးအပ်ဒိတ် — " + AS_OF + " (အသစ် တောင်းမရသေးပါ — မှတ်တမ်း ဈေးကို ပြထားသည်)";
-    }
-  }).catch(function(){
-    /* Silent by design: a failed check keeps the rates already on
-       screen, clears the busy guard so the next scheduled check can
-       still run, and leaves the console untouched. */
-    marketBusy = false;
-    fxFirstSettled = true;
-  });
-}
-
-/* ---------- Aggregate update: every currency at once ----------
-   One page lists every currency quoted in MMK together with both of
-   its rates (bank and market). Fetching that single page through the
-   same relays refreshes all 100+ currencies in one pass: bank rates
-   for every currency, plus market rates for the extended set — the
-   seven core pairs keep their own visible-block market check above.
-   A newer day advances the as-of date, changed rates update the
-   stored history points, and one refresh moves cards, converter,
-   table, ticker and chart together. Silent on failure: the rates
-   already on screen stay exactly as they are. */
-var aggBusy = false, lastAggCheck = 0;
-/* Stale-first-paint guard: until the first live FX sweep settles
-   (success or failure), the converter must not show the baked
-   2026-10-30 snapshot rate as if it were today's rate. */
-var fxFirstSettled = false;
