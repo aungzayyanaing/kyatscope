@@ -1,3 +1,62 @@
+document.addEventListener("visibilitychange", function(){ if (!document.hidden) upbitPoll(); });
+/* Seed KRW's LIVE candles from real 1-minute candles: Upbit's
+   KRW-BTC minutes crossed with Binance's BTCUSDT minutes,
+   aligned by minute — the same cross the live ticks use, so
+   the seeded hour and the forming candle share one recipe. */
+function ltSeedUpbit(){
+  if (selected !== "KRW" || LT.seeded) return;
+  var token = LT.token, base = ltBase();
+  function getB(host){
+    return fetch(host + "/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=60").then(function(r){ if (!r.ok) throw new Error("bad"); return r.json(); });
+  }
+  function attempt(i){
+    if (i >= LT_HOSTS.length) return;
+    Promise.all([
+      getB(LT_HOSTS[i]),
+      fetch("https://api.upbit.com/v1/candles/minutes/1?market=KRW-BTC&count=60").then(function(r){ if (!r.ok) throw new Error("bad"); return r.json(); })
+    ]).then(function(rs){
+      if (token !== LT.token || TV.tf !== "LIVE" || LT.seeded) return;
+      var btc = {};
+      (rs[0] || []).forEach(function(r){ btc[Math.floor(+r[0] / 60000)] = r; });
+      var us = (rs[1] || []).slice().reverse().map(function(k){
+        var iso = String(k.candle_date_time_utc || "");
+        if (iso && !/[zZ]|[+-]\d\d:\d\d$/.test(iso)) iso += "Z";
+        var min = Math.floor(Date.parse(iso) / 60000);
+        var b = btc[min]; if (!b) return null;
+        var o = +b[1], h = +b[2], l = +b[3], c = +b[4];
+        return { ts:min * 60, o:o / k.opening_price, h:h / k.low_price, l:l / k.high_price, c:c / k.trade_price };
+      }).filter(function(u){ return u && u.c > 0; });
+      if (us.length < 10) return;
+      var ref = us[us.length - 1].c; if (!(ref > 0)) return;
+      var anchor = ltPrice(); if (!(anchor > 0)) anchor = base;
+      ltSeedCandles(us.map(function(u){
+        return { d:ltDayId(u.ts), lt:ltTimeLabel(u.ts), o:anchor * u.o / ref, h:anchor * u.h / ref, l:anchor * u.l / ref, c:anchor * u.c / ref };
+      }));
+    }).catch(function(){ attempt(i + 1); });
+  }
+  attempt(0);
+}
+
+/* ----- Selected-pair fast lane: the JPY/MMK model, applied to
+   every pair. While any pair is on screen, its live cross is
+   polled every few seconds instead of waiting for the shared
+   20-second forex cycle — exactly how JPY/MMK moves: Binance
+   REST ticker prices first (the BTC<fiat> / BTCUSDT / USDTUSD
+   cross for JPY and for every BN_FIAT pair with a BTC book —
+   THB and EUR included — with the pair's own Binance fiat
+   symbol riding along as the fallback feed, the same real
+   prices bnRecompute already feeds from),
+   a Bybit ticker poll for pairs Bybit lists, and the pair's
+   TradingView USD scanner quote as the always-available fallback
+   source. feedSet's source priority keeps the strongest source
+   in charge whenever it answers, and the LIVE tick engine turns
+   every real move into a green/red tick of the forming candle
+   within a second of it landing — so whichever currency is
+   selected, its chart ticks at the same cadence as JPY's, over
+   its seeded history candles. USD stays on its card / Market
+   anchor (chart factor 1) and KGS has no live pair on any source,
+   so neither is ever polled or labelled as live here. ----- */
+var FAST = { bnBusy:false, bybitBusy:false };
 function fastBinancePoll(){
   if (selected === "USD" || selected === "KGS" || FAST.bnBusy) return;
   var syms = null;
@@ -534,17 +593,20 @@ function yahooFetchJSON(url){
   }
   return direct().then(function(j){
     if (j) return j;
-    /* Relay order for Yahoo JSON: jina first (fast, but it wraps
-       the JSON in a "Title / URL Source / Markdown Content"
-       header — the tolerant parse below recovers the JSON from
-       the first "{"), then the allorigins / codetabs relays. */
+    /* Relay order for Yahoo JSON: jina first (200 in <1s, verified
+       2026-11-06; the tolerant parse below recovers the JSON from
+       the first "{" of jina's "Title / URL Source / Markdown
+       Content" wrapper). allorigins + codetabs return 522 for
+       Yahoo now and used to burn 20s each, so they are NOT in this
+       chain anymore — one short allorigins-raw attempt is the only
+       fallback. Worst case per symbol is now ~27s, not ~89s. */
     var all = relayUrls(url);
-    var urls = [all[3], all[0], all[1], all[2]];
+    var urls = [[all[3], 12000], [all[0], 5000]];
     var chain = Promise.resolve(null);
-    urls.forEach(function(u){
+    urls.forEach(function(pair){
       chain = chain.then(function(got){
         if (got) return got;
-        return fetchText(u, 20000).then(function(t){
+        return fetchText(pair[0], pair[1]).then(function(t){
           if (!t) return null;
           try { return JSON.parse(t); } catch (e) {}
           try {
@@ -583,12 +645,22 @@ function stockFetchOne(t){
     return { t:t, ok:true, price:price, pct:pct, high:(meta.regularMarketDayHigh || price), low:(meta.regularMarketDayLow || price), prev:prev, hist:hist, at:Date.now() };
   }).catch(function(){ return { t:t, ok:false }; });
 }
-function stockPool(symbols, limit){
-  var idx = 0, out = [];
+function stockPool(symbols, limit, gapMs){
+  /* gapMs paces request STARTS (shared throttle): jina answers
+     ~35 rapid requests, then 429s — so the first pages burst and
+     the rest of the sweep is staggered instead of hammering. */
+  var idx = 0, out = [], nextStart = 0;
+  function paced(t){
+    var now = Date.now();
+    var wait = Math.max(0, nextStart - now);
+    nextStart = Math.max(now, nextStart) + (gapMs || 0);
+    if (!wait) return stockFetchOne(t);
+    return new Promise(function(res){ setTimeout(function(){ res(stockFetchOne(t)); }, wait); });
+  }
   function worker(){
     if (idx >= symbols.length) return Promise.resolve();
     var t = symbols[idx++];
-    return stockFetchOne(t).then(function(r){ out.push(r); }).then(worker);
+    return paced(t).then(function(r){ out.push(r); }).then(worker);
   }
   var workers = [];
   for (var i = 0; i < limit; i++) workers.push(worker());
@@ -599,33 +671,54 @@ function stockRound(){
   var next = STOCK_LIST.slice(STOCK.attempted, STOCK.attempted + 20).map(function(e){ return e[0]; });
   if (!next.length){ STOCK.done = true; stockStatus(); return; }
   STOCK.attempted += next.length;
-  stockPool(next, 10).then(function(results){
+  /* First two rounds (the visible first page) burst at full speed;
+     the rest of the sweep is staggered so jina's ~35-request burst
+     budget is not blown on every round. */
+  var burst = STOCK.attempted <= 40;
+  stockPool(next, burst ? 10 : 6, burst ? 0 : 150).then(function(results){
     results.forEach(function(r){
-      if (r.ok){ STOCK.rows[r.t] = r; STOCK.loaded++; }
+      if (r.ok){ if (!STOCK.rows[r.t]) STOCK.loaded++; STOCK.rows[r.t] = r; }
       else { STOCK.failed++; STOCK.failedSyms.push(r.t); }
     });
+    stockSaveCache();
     renderStocks();
     stockStatus();
     if (STOCK.attempted < STOCK_LIST.length){
-      STOCK.batchTimer = setTimeout(stockRound, 12000);
+      STOCK.batchTimer = setTimeout(stockRound, 2000);
     } else {
       STOCK.done = true;
       stockStatus();
       STOCK.refreshTimer = setInterval(stockRefreshVisible, 60000);
-      /* One retry pass for the symbols that failed (Yahoo 429s are
-         usually transient) — 90s after the first sweep. */
-      if (STOCK.failedSyms.length) STOCK.retryTimer = setTimeout(stockRetryFailed, 90000);
+      /* Retry pass for the symbols that failed (jina 429s are
+         transient — the budget refills) — 30s after the first sweep,
+         then every 30s until everything is loaded. */
+      if (STOCK.failedSyms.length) STOCK.retryTimer = setTimeout(stockRetryFailed, 30000);
     }
   });
+}
+function stockSaveCache(){
+  try {
+    localStorage.setItem("kyatStocks", JSON.stringify({ at: Date.now(), rows: STOCK.rows }));
+  } catch (e) {}
+}
+function stockLoadCache(){
+  try {
+    var c = JSON.parse(localStorage.getItem("kyatStocks") || "null");
+    if (c && c.at && Date.now() - c.at < 12 * 3600 * 1000 && c.rows){
+      Object.keys(c.rows).forEach(function(k){ STOCK.rows[k] = c.rows[k]; });
+      STOCK.loaded = Object.keys(STOCK.rows).length;
+    }
+  } catch (e) {}
 }
 function stockRetryFailed(){
   var syms = STOCK.failedSyms.slice(0, 20);
   STOCK.failedSyms = STOCK.failedSyms.slice(20);
   if (!syms.length) return;
-  stockPool(syms, 10).then(function(results){
+  stockPool(syms, 6, 150).then(function(results){
     results.forEach(function(r){
-      if (r.ok){ STOCK.rows[r.t] = r; STOCK.loaded++; STOCK.failed--; }
+      if (r.ok){ if (!STOCK.rows[r.t]) STOCK.loaded++; STOCK.rows[r.t] = r; STOCK.failed--; }
     });
+    stockSaveCache();
     renderStocks();
     stockStatus();
     if (STOCK.failedSyms.length) STOCK.retryTimer = setTimeout(stockRetryFailed, 30000);
@@ -663,8 +756,8 @@ function stockStatus(){
    companies' own websites (see logos/SOURCES.md). Local files only --
    no Logo.dev, no token. Tickers not listed here keep the monogram.
    STOCK_LOGOS_DARK lists white-only marks, shown on a dark chip. */
-var STOCK_LOGOS = {"AA":"AA.png","AAL":"AAL.svg","AAPL":"AAPL.png","ABBV":"ABBV.jpg","ABNB":"ABNB.svg","ABT":"ABT.png","ADBE":"ADBE.png","AEP":"AEP.svg","AMD":"AMD.svg","AME":"AME.png","AMGN":"AMGN.svg","AMP":"AMP.png","AMZN":"AMZN.svg","ANF":"ANF.svg","APD":"APD.png","ARM":"ARM.svg","ASML":"ASML.svg","AVGO":"AVGO.svg","AXP":"AXP.svg","AZN":"AZN.png","BA":"BA.png","BABA":"BABA.png","BAC":"BAC.png","BAX":"BAX.svg","BBY":"BBY.jpg","BDX":"BDX.svg","BEN":"BEN.png","BIDU":"BIDU.png","BIIB":"BIIB.svg","BK":"BK.png","BKNG":"BKNG.svg","BLK":"BLK.svg","BMY":"BMY.svg","BNTX":"BNTX.svg","BSX":"BSX.svg","C":"C.png","CAG":"CAG.png","CAH":"CAH.png","CAT":"CAT.jpg","CBOE":"CBOE.svg","CDNS":"CDNS.png","CI":"CI.svg","CL":"CL.png","CLF":"CLF.png","CMI":"CMI.svg","CNC":"CNC.svg","COF":"COF.svg","COR":"COR.png","COST":"COST.png","CPB":"CPB.svg","CRM":"CRM.svg","CRWD":"CRWD.svg","CVS":"CVS.png","CVX":"CVX.png","DAL":"DAL.svg","DASH":"DASH.svg","DDOG":"DDOG.png","DE":"DE.png","DELL":"DELL.png","DEO":"DEO.svg","DHI":"DHI.svg","DHR":"DHR.svg","DIS":"DIS.png","DUK":"DUK.svg","DXCM":"DXCM.svg","ELV":"ELV.svg","EOG":"EOG.png","EW":"EW.svg","FCX":"FCX.svg","FDX":"FDX.png","FTNT":"FTNT.svg","GE":"GE.svg","GILD":"GILD.png","GIS":"GIS.svg","GOLD":"GOLD.svg","GOOG":"GOOG.png","GOOGL":"GOOGL.svg","GPN":"GPN.svg","GS":"GS.png","GSK":"GSK.svg","HD":"HD.svg","HLT":"HLT.svg","HON":"HON.svg","HPQ":"HPQ.svg","HRL":"HRL.svg","HSY":"HSY.png","IBM":"IBM.png","ILMN":"ILMN.svg","INTC":"INTC.svg","IQV":"IQV.svg","ITW":"ITW.svg","JD":"JD.png","JNJ":"JNJ.png","JPM":"JPM.svg","K":"K.svg","KBH":"KBH.svg","KDP":"KDP.png","KLAC":"KLAC.svg","KMB":"KMB.svg","KO":"KO.svg","LI":"LI.png","LIN":"LIN.png","LLY":"LLY.svg","LMT":"LMT.svg","LOW":"LOW.svg","LRCX":"LRCX.svg","MA":"MA.png","MAR":"MAR.png","MAS":"MAS.png","MCK":"MCK.svg","MCO":"MCO.svg","MDB":"MDB.svg","MDLZ":"MDLZ.png","MELI":"MELI.png","META":"META.svg","MMM":"MMM.svg","MNST":"MNST.png","MOH":"MOH.png","MRK":"MRK.svg","MRNA":"MRNA.svg","MS":"MS.svg","MSFT":"MSFT.png","MTB":"MTB.svg","MU":"MU.png","NDAQ":"NDAQ.svg","NEE":"NEE.png","NEM":"NEM.png","NET":"NET.svg","NFLX":"NFLX.svg","NIO":"NIO.svg","NKE":"NKE.png","NUE":"NUE.png","NVDA":"NVDA.svg","NVO":"NVO.svg","NVR":"NVR.png","ORCL":"ORCL.svg","PANW":"PANW.svg","PAYX":"PAYX.svg","PCAR":"PCAR.png","PDD":"PDD.png","PEP":"PEP.png","PFE":"PFE.svg","PG":"PG.svg","PHM":"PHM.png","PLTR":"PLTR.png","PYPL":"PYPL.svg","REGN":"REGN.svg","RF":"RF.svg","RMD":"RMD.png","RTX":"RTX.svg","SBUX":"SBUX.png","SCCO":"SCCO.png","SCHW":"SCHW.png","SE":"SE.png","SHOP":"SHOP.svg","SHW":"SHW.png","SJM":"SJM.png","SMCI":"SMCI.svg","SNOW":"SNOW.svg","SNPS":"SNPS.svg","SNY":"SNY.png","SO":"SO.svg","STLD":"STLD.png","STT":"STT.svg","STX":"STX.svg","STZ":"STZ.png","SWK":"SWK.svg","SYK":"SYK.png","TAP":"TAP.png","TFC":"TFC.svg","TGT":"TGT.svg","TMO":"TMO.svg","TOL":"TOL.svg","TSM":"TSM.png","UAA":"UAA.jpg","UBER":"UBER.png","UNH":"UNH.svg","UPS":"UPS.svg","USB":"USB.svg","V":"V.png","WBA":"WBA.png","WDC":"WDC.svg","WFC":"WFC.png","WHR":"WHR.jpg","WMT":"WMT.svg","X":"X.svg","XOM":"XOM.png","XPEV":"XPEV.svg","ZS":"ZS.svg","ZTS":"ZTS.svg"};
-var STOCK_LOGOS_DARK = {"AA":1,"AMD":1,"ARM":1,"DAL":1,"FCX":1,"FDX":1,"GE":1,"GIS":1,"HD":1,"MCO":1,"MTB":1,"NEM":1,"NIO":1,"NUE":1,"NVR":1,"STX":1,"TFC":1,"UBER":1,"WMT":1,"X":1,"XPEV":1};
+var STOCK_LOGOS = {"AA":"AA.png","AAL":"AAL.svg","AAPL":"AAPL.png","ABBV":"ABBV.jpg","ABNB":"ABNB.svg","ABT":"ABT.png","ADBE":"ADBE.png","ADP":"ADP.svg","AEP":"AEP.svg","AMD":"AMD.svg","AME":"AME.png","AMGN":"AMGN.svg","AMP":"AMP.png","AMZN":"AMZN.svg","ANET":"ANET.png","ANF":"ANF.svg","APD":"APD.png","ARM":"ARM.svg","ASML":"ASML.svg","AVGO":"AVGO.svg","AXP":"AXP.svg","AZN":"AZN.png","BA":"BA.png","BABA":"BABA.png","BAC":"BAC.png","BAX":"BAX.svg","BBY":"BBY.jpg","BDX":"BDX.svg","BEN":"BEN.png","BIDU":"BIDU.png","BIIB":"BIIB.svg","BK":"BK.png","BKNG":"BKNG.svg","BLK":"BLK.svg","BMY":"BMY.svg","BNTX":"BNTX.svg","BSX":"BSX.svg","BURL":"BURL.png","C":"C.png","CAG":"CAG.png","CAH":"CAH.png","CAT":"CAT.jpg","CBOE":"CBOE.svg","CDNS":"CDNS.png","CFG":"CFG.svg","CI":"CI.svg","CL":"CL.png","CLF":"CLF.png","CMI":"CMI.svg","CNC":"CNC.svg","COF":"COF.svg","COR":"COR.png","COST":"COST.png","CPB":"CPB.svg","CRM":"CRM.svg","CRWD":"CRWD.svg","CVS":"CVS.png","CVX":"CVX.png","DAL":"DAL.svg","DASH":"DASH.svg","DDOG":"DDOG.png","DE":"DE.png","DECK":"DECK.svg","DELL":"DELL.png","DEO":"DEO.svg","DHI":"DHI.svg","DHR":"DHR.svg","DIS":"DIS.png","DLTR":"DLTR.svg","DOV":"DOV.png","DUK":"DUK.svg","DXCM":"DXCM.svg","ECL":"ECL.svg","ELV":"ELV.svg","EOG":"EOG.png","EW":"EW.svg","FCX":"FCX.svg","FDX":"FDX.png","FIS":"FIS.png","FIVE":"FIVE.svg","FTNT":"FTNT.svg","GE":"GE.svg","GILD":"GILD.png","GIS":"GIS.svg","GOLD":"GOLD.svg","GOOG":"GOOG.png","GOOGL":"GOOGL.svg","GPN":"GPN.svg","GPS":"GPS.svg","GS":"GS.png","GSK":"GSK.svg","HD":"HD.svg","HLT":"HLT.svg","HON":"HON.svg","HPQ":"HPQ.svg","HRL":"HRL.svg","HSY":"HSY.png","IBM":"IBM.png","ILMN":"ILMN.svg","INTC":"INTC.svg","IQV":"IQV.svg","ITW":"ITW.svg","JD":"JD.png","JNJ":"JNJ.png","JPM":"JPM.svg","K":"K.svg","KBH":"KBH.svg","KDP":"KDP.png","KLAC":"KLAC.svg","KMB":"KMB.svg","KO":"KO.svg","KR":"KR.svg","LEN":"LEN.svg","LI":"LI.png","LIN":"LIN.png","LLY":"LLY.svg","LMT":"LMT.svg","LOW":"LOW.svg","LRCX":"LRCX.svg","LULU":"LULU.svg","LUV":"LUV.svg","MA":"MA.png","MAR":"MAR.png","MAS":"MAS.png","MCD":"MCD.jpg","MCK":"MCK.svg","MCO":"MCO.svg","MDB":"MDB.svg","MDLZ":"MDLZ.png","MDT":"MDT.svg","MELI":"MELI.png","META":"META.svg","MMM":"MMM.svg","MNST":"MNST.png","MOH":"MOH.png","MRK":"MRK.svg","MRNA":"MRNA.svg","MS":"MS.svg","MSFT":"MSFT.png","MTB":"MTB.svg","MU":"MU.png","NDAQ":"NDAQ.svg","NEE":"NEE.png","NEM":"NEM.png","NET":"NET.svg","NFLX":"NFLX.svg","NIO":"NIO.svg","NKE":"NKE.png","NUE":"NUE.png","NVDA":"NVDA.svg","NVO":"NVO.svg","NVR":"NVR.png","ORCL":"ORCL.svg","PANW":"PANW.svg","PAYX":"PAYX.svg","PCAR":"PCAR.png","PDD":"PDD.png","PEP":"PEP.png","PFE":"PFE.svg","PG":"PG.svg","PHM":"PHM.png","PLTR":"PLTR.png","PYPL":"PYPL.svg","REGN":"REGN.svg","RF":"RF.svg","RMD":"RMD.png","ROK":"ROK.svg","RTX":"RTX.svg","SBUX":"SBUX.png","SCCO":"SCCO.png","SCHW":"SCHW.png","SE":"SE.png","SHOP":"SHOP.svg","SHW":"SHW.png","SJM":"SJM.png","SMCI":"SMCI.svg","SNOW":"SNOW.svg","SNPS":"SNPS.svg","SNY":"SNY.png","SO":"SO.svg","STLD":"STLD.png","STT":"STT.svg","STX":"STX.svg","STZ":"STZ.png","SWK":"SWK.svg","SYK":"SYK.png","TAP":"TAP.png","TFC":"TFC.svg","TGT":"TGT.svg","TJX":"TJX.svg","TMO":"TMO.svg","TOL":"TOL.svg","TSM":"TSM.png","UAA":"UAA.jpg","UAL":"UAL.svg","UBER":"UBER.png","UNH":"UNH.svg","UPS":"UPS.svg","USB":"USB.svg","V":"V.png","WBA":"WBA.png","WDC":"WDC.svg","WFC":"WFC.png","WHR":"WHR.jpg","WMT":"WMT.svg","X":"X.svg","XOM":"XOM.png","XPEV":"XPEV.svg","ZS":"ZS.svg","ZTS":"ZTS.svg"};
+var STOCK_LOGOS_DARK = {"AA":1,"AMD":1,"ANET":1,"ARM":1,"DAL":1,"ECL":1,"FCX":1,"FDX":1,"GE":1,"GIS":1,"HD":1,"KR":1,"MCO":1,"MTB":1,"NEM":1,"NIO":1,"NUE":1,"NVR":1,"STX":1,"TFC":1,"UBER":1,"WMT":1,"X":1,"XPEV":1};
 function stockLogoHTML(t){
   if (t === "^GSPC") return '<span class="mono">S&amp;P</span>';
   var f = STOCK_LOGOS[t];
@@ -724,6 +817,7 @@ function renderStocks(){
   if (nx) nx.disabled = STOCK.page >= pages - 1;
 }
 (function stockInit(){
+  stockLoadCache(); /* last-known prices show instantly on repeat visits */
   var s = document.getElementById("stSearch");
   if (s) s.addEventListener("input", function(){ STOCK.query = s.value; STOCK.page = 0; renderStocks(); });
   var pv = document.getElementById("stPrev"), nx = document.getElementById("stNext");
@@ -876,6 +970,7 @@ function lwShow(asset){
     }
     lwLoadData(asset, function(got){
       if (!got){
+        lwSetSeries(); /* clear the previous asset's chart, if any */
         if (st) st.textContent = "ဒီအရာအတွက် ဂရပ်ဒေတာ မရသေးပါ — ခဏနေမှ ထပ်ကြိုးစားပါ။";
         return;
       }
@@ -1208,6 +1303,7 @@ function checkMarketUpdate(){
   });
   chain.then(function(){
     marketBusy = false;
+    fxFirstSettled = true;
     /* A sweep in which every relay failed must not burn the
        5-minute throttle: clear the stamp so the next tab-visible
        or interval check retries immediately instead of leaving
@@ -1228,6 +1324,7 @@ function checkMarketUpdate(){
        screen, clears the busy guard so the next scheduled check can
        still run, and leaves the console untouched. */
     marketBusy = false;
+    fxFirstSettled = true;
   });
 }
 
@@ -1242,116 +1339,7 @@ function checkMarketUpdate(){
    table, ticker and chart together. Silent on failure: the rates
    already on screen stay exactly as they are. */
 var aggBusy = false, lastAggCheck = 0;
-var CORE7 = { USD:1, THB:1, CNY:1, JPY:1, KRW:1, VND:1, EUR:1 };
-function extractCurrenciesJson(text){
-  if (!text || text.length < 500) return null;
-  var marker = '"currencies":[';
-  var i = text.indexOf(marker);
-  if (i < 0) return null;
-  var dayId = null;
-  var mm = text.slice(0, i).match(/"dayId":\d{8}/g);
-  if (mm && mm.length) dayId = mm[mm.length - 1].slice(-8);
-  var start = i + marker.length - 1, depth = 0, inStr = false, esc = false;
-  for (var k = start; k < text.length; k++){
-    var ch = text.charAt(k);
-    if (inStr){
-      if (esc) esc = false;
-      else if (ch === "\\") esc = true;
-      else if (ch === '"') inStr = false;
-    }
-    else if (ch === '"') inStr = true;
-    else if (ch === "[") depth++;
-    else if (ch === "]"){
-      depth--;
-      if (depth === 0){
-        try { return { list: JSON.parse(text.slice(start, k + 1)), dayId: dayId }; }
-        catch (e) { return null; }
-      }
-    }
-  }
-  return null;
-}
-function firstAggregate(urls){
-  return new Promise(function(resolve){
-    var pending = urls.length, settled = false;
-    if (!pending){ resolve(null); return; }
-    var race = ("AbortController" in window) ? new AbortController() : null;
-    function settle(v){
-      if (settled) return;
-      settled = true;
-      if (race){ try { race.abort(); } catch (e) {} }
-      resolve(v);
-    }
-    urls.forEach(function(u, idx){
-      fetchText(u, 15000, race ? race.signal : null).then(function(t){
-        var r = null;
-        try { r = extractCurrenciesJson(t); } catch (e) { r = null; }
-        if (r && r.list && r.list.length > 50) settle({ data: r, relay: idx });
-        else if (--pending === 0) settle(null);
-      }, function(){ if (--pending === 0) settle(null); });
-    });
-  });
-}
-function applyAggSource(c, srcName, s, dayId){
-  if (!s) return false;
-  var buy = parseFloat(s.buy), sell = parseFloat(s.sell);
-  if (!(buy > 0) || !(sell > 0)) return false;
-  var cur = c[srcName];
-  if (cur && (buy < cur.buy * 0.5 || buy > cur.buy * 2)) return false;
-  var chg = parseFloat(s.change) || 0;
-  var pct = round2((parseFloat(s.changePercent) || 0) * 100);
-  var changed = false;
-  if (!cur){
-    c[srcName] = { buy: round2(buy), sell: round2(sell), chg: round2(chg), pct: pct };
-    changed = true;
-  } else if (Math.abs(cur.buy - buy) >= 0.005 || Math.abs(cur.sell - sell) >= 0.005){
-    cur.buy = round2(buy); cur.sell = round2(sell);
-    cur.chg = round2(chg); cur.pct = pct;
-    changed = true;
-  }
-  if (dayId){
-    var key = c.code + "_" + srcName, pt = dayId + ":" + c[srcName].buy;
-    var parts = HISTORY[key] ? HISTORY[key].split(",") : [], found = false;
-    for (var i = 0; i < parts.length; i++){
-      if (parts[i].indexOf(dayId + ":") === 0){
-        if (parts[i] !== pt){ parts[i] = pt; changed = true; }
-        found = true; break;
-      }
-    }
-    if (!found){ parts.push(pt); changed = true; }
-    HISTORY[key] = parts.join(",");
-  }
-  return changed;
-}
-function checkAggregateUpdate(){
-  if (aggBusy) return;
-  var now = Date.now();
-  if (lastAggCheck && now - lastAggCheck < 5 * 60 * 1000) return;
-  aggBusy = true; lastAggCheck = now;
-  var all = relayUrls("https://egcurrency.com/en/currency/mmk");
-  var urls = relayOrder.map(function(i){ return all[i]; });
-  firstAggregate(urls).then(function(res){
-    aggBusy = false;
-    if (!res){ lastAggCheck = 0; return; }
-    var won = relayOrder[res.relay];
-    relayOrder = [won].concat(relayOrder.filter(function(x){ return x !== won; }));
-    var dayId = res.data.dayId, changed = false;
-    res.data.list.forEach(function(e){
-      try {
-        if (!e || !e.code) return;
-        var c = byCode(e.code);
-        if (!c || c.code !== e.code) return;
-        var srcs = e.sources || {};
-        if (applyAggSource(c, "bank", srcs.bank, dayId)) changed = true;
-        if (!CORE7[c.code] && applyAggSource(c, "market", srcs.market, dayId)) changed = true;
-      } catch (err) { /* one bad row never breaks the whole sweep */ }
-    });
-    if (dayId && dayId > AS_OF.replace(/-/g, "")) setAsOf(isoOfDayId(dayId));
-    if (changed) refreshAll();
-  }).catch(function(){ aggBusy = false; });
-}
-
-/* Last-resort guard: the update checks handle every failure
-   themselves and fall back to the embedded rates, but no stray
-   rejected promise from them may ever reach the console. */
-if (window.addEventListener) window.addEventListener("unhandledrejection", function(e){ if (e && e.preventDefault) e.preventDefault(); });
+/* Stale-first-paint guard: until the first live FX sweep settles
+   (success or failure), the converter must not show the baked
+   2026-10-30 snapshot rate as if it were today's rate. */
+var fxFirstSettled = false;

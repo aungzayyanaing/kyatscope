@@ -426,6 +426,13 @@ convSel.value = selected;
 
 function renderConverter(){
   var c = byCode(convSel.value);
+  /* Stale first paint: while the first live FX sweep is still in
+     flight, show a loading note instead of the baked snapshot rate. */
+  if (!fxFirstSettled && (marketBusy || aggBusy)){
+    var box0 = document.getElementById("convResult");
+    if (box0) box0.innerHTML = '<div class="r-main">ဈေးအသစ် တောင်းနေသည်…</div><div class="r-sub">ယနေ့ ဈေးကို အတည်ပြုနေပါသည် — ခဏစောင့်ပါ</div>';
+    return;
+  }
   /* The yellow detail banner must follow the converter currency:
      changing the dropdown used to leave the previous currency's
      banner on screen while the result and chart had moved on. */
@@ -1439,62 +1446,3 @@ setTimeout(upbitPoll, 1500);
 setInterval(upbitPoll, 20000);
 setTimeout(upbitSocket, 1800);
 setInterval(fastUpbitPoll, 3000);
-document.addEventListener("visibilitychange", function(){ if (!document.hidden) upbitPoll(); });
-/* Seed KRW's LIVE candles from real 1-minute candles: Upbit's
-   KRW-BTC minutes crossed with Binance's BTCUSDT minutes,
-   aligned by minute — the same cross the live ticks use, so
-   the seeded hour and the forming candle share one recipe. */
-function ltSeedUpbit(){
-  if (selected !== "KRW" || LT.seeded) return;
-  var token = LT.token, base = ltBase();
-  function getB(host){
-    return fetch(host + "/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=60").then(function(r){ if (!r.ok) throw new Error("bad"); return r.json(); });
-  }
-  function attempt(i){
-    if (i >= LT_HOSTS.length) return;
-    Promise.all([
-      getB(LT_HOSTS[i]),
-      fetch("https://api.upbit.com/v1/candles/minutes/1?market=KRW-BTC&count=60").then(function(r){ if (!r.ok) throw new Error("bad"); return r.json(); })
-    ]).then(function(rs){
-      if (token !== LT.token || TV.tf !== "LIVE" || LT.seeded) return;
-      var btc = {};
-      (rs[0] || []).forEach(function(r){ btc[Math.floor(+r[0] / 60000)] = r; });
-      var us = (rs[1] || []).slice().reverse().map(function(k){
-        var iso = String(k.candle_date_time_utc || "");
-        if (iso && !/[zZ]|[+-]\d\d:\d\d$/.test(iso)) iso += "Z";
-        var min = Math.floor(Date.parse(iso) / 60000);
-        var b = btc[min]; if (!b) return null;
-        var o = +b[1], h = +b[2], l = +b[3], c = +b[4];
-        return { ts:min * 60, o:o / k.opening_price, h:h / k.low_price, l:l / k.high_price, c:c / k.trade_price };
-      }).filter(function(u){ return u && u.c > 0; });
-      if (us.length < 10) return;
-      var ref = us[us.length - 1].c; if (!(ref > 0)) return;
-      var anchor = ltPrice(); if (!(anchor > 0)) anchor = base;
-      ltSeedCandles(us.map(function(u){
-        return { d:ltDayId(u.ts), lt:ltTimeLabel(u.ts), o:anchor * u.o / ref, h:anchor * u.h / ref, l:anchor * u.l / ref, c:anchor * u.c / ref };
-      }));
-    }).catch(function(){ attempt(i + 1); });
-  }
-  attempt(0);
-}
-
-/* ----- Selected-pair fast lane: the JPY/MMK model, applied to
-   every pair. While any pair is on screen, its live cross is
-   polled every few seconds instead of waiting for the shared
-   20-second forex cycle — exactly how JPY/MMK moves: Binance
-   REST ticker prices first (the BTC<fiat> / BTCUSDT / USDTUSD
-   cross for JPY and for every BN_FIAT pair with a BTC book —
-   THB and EUR included — with the pair's own Binance fiat
-   symbol riding along as the fallback feed, the same real
-   prices bnRecompute already feeds from),
-   a Bybit ticker poll for pairs Bybit lists, and the pair's
-   TradingView USD scanner quote as the always-available fallback
-   source. feedSet's source priority keeps the strongest source
-   in charge whenever it answers, and the LIVE tick engine turns
-   every real move into a green/red tick of the forming candle
-   within a second of it landing — so whichever currency is
-   selected, its chart ticks at the same cadence as JPY's, over
-   its seeded history candles. USD stays on its card / Market
-   anchor (chart factor 1) and KGS has no live pair on any source,
-   so neither is ever polled or labelled as live here. ----- */
-var FAST = { bnBusy:false, bybitBusy:false };
