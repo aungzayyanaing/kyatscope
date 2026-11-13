@@ -188,7 +188,7 @@ DATA.push({ code:"FJD", name:"ဖီဂျီ ဒေါ်လာ", en:"Fijian Do
     bank:{buy:1027.6274, sell:917.6491, chg:0, pct:0} });
 DATA.push({ code:"JOD", name:"ဂျော်ဒန် ဒီနာ", en:"Jordanian Dinar", sym:"د.ا", unit:1, icon:"jo", ctry:"Jordan", kw:"ဂျော်ဒန်",
     bank:{buy:2986.4562, sell:2938.4038, chg:9.5771, pct:0.32} });
-DATA.push({ code:"KGS", name:"ကာဂျစ် ဆိုမ်", en:"Kyrgystani Som", sym:"с", unit:1, icon:"kg", ctry:"Kyrgyzstan", kw:"ကာဂျစ္စတန်",
+DATA.push({ code:"KGS", name:"ကာဂျစ် ဆိုမ်", en:"Kyrgyzstani Som", sym:"с", unit:1, icon:"kg", ctry:"Kyrgyzstan", kw:"ကာဂျစ္စတန်",
     bank:{buy:23.7479, sell:23.8669, chg:0, pct:0} });
 DATA.push({ code:"SRD", name:"ဆူရီနမ် ဒေါ်လာ", en:"Surinamese Dollar", sym:"$", unit:1, icon:"sr", ctry:"Suriname", kw:"ဆူရီနမ်",
     bank:{buy:56.0322, sell:55.1854, chg:0, pct:0} });
