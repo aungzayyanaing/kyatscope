@@ -268,6 +268,6 @@ Detailed per-ticker verification notes live in `SOURCES-W1.md` … `SOURCES-W14.
 
 ## UI wiring
 
-- `index.html` → `STOCK_LOGOS` map (ticker → `logos/<file>`), `STOCK_LOGOS_DARK` set (21 white-only tickers). `stockLogoHTML()` uses the local file with `onerror` falling back to the letter monogram — never a broken image.
+- `index.html` → `STOCK_LOGOS` map (ticker → `logos/<file>`), `STOCK_LOGOS_DARK` set (24 white-only tickers). `stockLogoHTML()` uses the local file with `onerror` falling back to the letter monogram — never a broken image.
 - CSS `.st-logo`: white rounded chip, `object-fit:contain`, padding; `.dark` variant `#171717` for white-only marks.
 - Logo.dev is fully removed: no `LOGO_DEV_TOKEN`, no `logo.dev` references, footer now reads "Stock logos: official company websites".
