@@ -4,14 +4,14 @@ Date verified: 2026-11-06. Method: official company website only — homepage he
 
 ## Summary
 
-- **211 logos wired in** (`index.html`, `STOCK_LOGOS` map, local `logos/<TICKER>` files) out of 236 stocks.
-- **1 verified source NOT wired: ICE** (Intercontinental Exchange) — the official homepage logo is an inline SVG whose shapes use site-CSS classes (`fill-current` / `text-ice-blue`) with `fill="none"` on the parent group, so as a standalone `<img>` it renders blank. The file `logos/ICE.svg` is kept on disk for reference but is NOT in the map; ICE keeps its letter monogram.
-- **24 tickers keep their letter monogram** — no downloadable official logo could be obtained (see list below).
+- **210 logos wired in** (`js/app03.js`, `STOCK_LOGOS` map, local `logos/<TICKER>` files) out of 236 stocks.
+- **1 verified source NOT wired: ICE** (Intercontinental Exchange) — the official homepage logo is an inline SVG whose shapes use site-CSS classes (`fill-current` / `text-ice-blue`) with `fill="none"` on the parent group, so as a standalone `<img>` it renders blank. No `logos/ICE.svg` file is on disk, and ICE is NOT in the map; ICE keeps its letter monogram.
+- **25 tickers keep their letter monogram** — see list below.
 - **^GSPC (S&P 500)** keeps its `S&P` monogram by design (an index, not a company).
 - **24 white-only logos** are shown on a dark chip (`#171717`) in the UI: AA, AMD, ARM, DAL, FCX, FDX, GE, GIS, HD, MCO, MTB, NEM, NIO, NUE, NVR, STX, TFC, UBER, WMT, X, XPEV, ANET, ECL, KR.
 - Crypto logos are unchanged (CoinGecko images via the existing inline/API marks) — not part of this job except the top 5, which keep their correct marks.
 
-## Wired logos (211)
+## Wired logos (210)
 
 | Ticker | Company | Source URL (logo taken from) | File |
 |---|---|---|---|
@@ -112,7 +112,6 @@ Date verified: 2026-11-06. Method: official company website only — homepage he
 | HPQ | HP | inline | HPQ.svg |
 | HRL | Hormel Foods | https://www.hormelfoods.com/wp-content/themes/hormel-foods/svg-icons/sprite.svg | HRL.svg |
 | HSY | Hershey | https://www.thehersheycompany.com/content/dam/hershey-corporate/images/icons/the-hershey-company-logo-color-header.png | HSY.png |
-| HUM | Humana | https://assets.humana.com/is/content/humana/2022_Humana_Lockup_RGB_News_Green_No-R_No-Pad_Horiz | HUM.svg |
 | IBM | IBM | https://www.ibm.com/content/dam/worldwide-content/creative-assets/s-migr/ul/g/18/f9/ibm_logo_pos_blue60_rgb.png | IBM.png |
 | ILMN | Illumina | https://assets.illumina.com/content/dam/illumina-common/logo/illumina-full_logo.svg | ILMN.svg |
 | INTC | Intel | https://d1io3yog0oux5.cloudfront.net/_ae41de1e3c92a2d70014908a6d92f612/intel/files/theme/images/header-logo.svg | INTC.svg |
@@ -231,9 +230,9 @@ Date verified: 2026-11-06. Method: official company website only — homepage he
 
 | Ticker | Company | Source URL | File | Reason not wired |
 |---|---|---|---|---|
-| ICE | Intercontinental Exchange | https://www.ice.com/ (inline SVG, `<title>ICE Logo</title>`) | ICE.svg | Renders blank as a standalone image — shapes depend on site CSS classes with `fill="none"` on the parent group. Keeps monogram. |
+| ICE | Intercontinental Exchange | https://www.ice.com/ (inline SVG, `<title>ICE Logo</title>`) | — | No file on disk. Renders blank as a standalone image — shapes depend on site CSS classes with `fill="none"` on the parent group. Keeps monogram. |
 
-## Monogram — no official logo obtainable (24)
+## Monogram — no logo wired (25)
 
 | Ticker | Company | Reason |
 |---|---|---|
@@ -249,6 +248,7 @@ Date verified: 2026-11-06. Method: official company website only — homepage he
 | ETN | Eaton | eaton.com times out (no response) via curl at multiple timeouts; eaton.emotion.com brand center unreachable; fetched Eaton news pages expose no logo asset. |
 | FITB | Fifth Third Bancorp | no downloadable logo file found. 53.com homepage and press releases (e.g. https://www.53.com/content/fifth-third/en/media-center/press-releases/2026/press-release-2026-06-01.html) expose only hero/product images; the Fifth Third logo is inline SVG/CSS. No substitute used. |
 | HBAN | Huntington Bancshares | official logo asset URLs were found (https://www.huntington.com/-/media/hcom/global/logo/huntington-logo-og.png and https://www.huntington.com/-/media/hcom/global/logo/Huntington_Logo_2C_4C.jpg) but direct download is blocked by Akamai (403 "Access Denied", even with full browser headers). A press-release copy on multivu.com (PRNewswire's host, from the ir.huntington.com brand-refresh release) was not used because it is not a company-owned domain. |
+| HUM | Humana | No logo file is on disk and HUM is not in the STOCK_LOGOS map. Keeps its letter monogram. |
 | KEY | KeyCorp (KeyBank) | curl to key.com timed out repeatedly; browser text of the homepage exposed no logo asset. No file saved. |
 | PH | Parker-Hannifin | parker.com returns Akamai "Access Denied" (403); investors.parker.com exposes no logo image (only a Win Strategy diagram). Only third-party PRNewswire-hosted logo links exist — not used. |
 | PNC | PNC Financial | Official logo URL verified in the pnc.com header (white/reversed version, orange circle + white "PNC"): https://www.pnc.com/content/experience-fragments/pnc-com/en/navigation/pnc-navigation---main-menu/master/_jcr_content/root/container/image.coreimg.svg/1657336133655/pnc-logo-rev.svg — but no bytes obtainable from this environment (direct fetch times out, allorigins/codetabs 522). White-only, would go on a dark chip if ever obtained. Keeps its letter monogram. |
@@ -268,6 +268,6 @@ Detailed per-ticker verification notes live in `SOURCES-W1.md` … `SOURCES-W14.
 
 ## UI wiring
 
-- `index.html` → `STOCK_LOGOS` map (ticker → `logos/<file>`), `STOCK_LOGOS_DARK` set (24 white-only tickers). `stockLogoHTML()` uses the local file with `onerror` falling back to the letter monogram — never a broken image.
+- `js/app03.js` → `STOCK_LOGOS` map (ticker → `logos/<file>`), `STOCK_LOGOS_DARK` set (24 white-only tickers). `stockLogoHTML()` uses the local file with `onerror` falling back to the letter monogram — never a broken image.
 - CSS `.st-logo`: white rounded chip, `object-fit:contain`, padding; `.dark` variant `#171717` for white-only marks.
 - Logo.dev is fully removed: no `LOGO_DEV_TOKEN`, no `logo.dev` references, footer now reads "Stock logos: official company websites".
