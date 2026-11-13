@@ -6,7 +6,7 @@
    the two disagreed on 6 of 7 pair levels and 5 of 7 change % that
    day, and the visible block is the rate a visitor actually sees.
    unit = the foreign amount the quoted price covers
-   (JPY quoted per 100, KRW & VND per 1000, others per 1) */
+   (JPY, HKD and PKR quoted per 100, KRW, VND, IDR and LAK per 1000, others per 1) */
 var DATA = [];
 DATA.push({ code:"USD", name:"အမေရိကန် ဒေါ်လာ", en:"US Dollar", sym:"$", icon:"us", ctry:"United States", kw:"အမေရိကန် America USA", unit:1,
     market:{buy:4826.66, sell:4778.39, chg:33.33, pct:0.70},
