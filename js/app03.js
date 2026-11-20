@@ -1005,10 +1005,18 @@ function lwDayIdToISO(d){
 function lwLoadData(asset, done){
   LW.lineData = null; LW.candleData = null;
   if (asset.kind === "fx"){
-    var key = asset.sym + "_market";
-    var pts = tvParse(HISTORY[key] || "");
+    /* Same source rule as the main chart (tvSetSeries): the active
+       mode's history when it exists, else the other source. The old
+       code always read _market — the 65 bank-only currencies have
+       no _market series at all, so opening the Line chart for one
+       drew an empty chart under a caption claiming a line chart.
+       A series that is empty in both sources reports no data, so
+       the caller shows the honest "no data" note instead. */
+    var fc = byCode(asset.sym);
+    var fsrc = (fc && fc[mode]) ? mode : (mode === "market" ? "bank" : "market");
+    var pts = tvParse(HISTORY[asset.sym + "_" + fsrc] || "");
     LW.lineData = pts.map(function(p){ return { time: lwDayIdToISO(p.d), value: p.p }; });
-    done(true);
+    done(pts.length > 0);
     return;
   }
   if (asset.kind === "stock"){

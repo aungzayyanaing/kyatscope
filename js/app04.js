@@ -66,14 +66,18 @@ function fetchPairRate(c){
 }
 function applyMarketRate(c, r, baseDay){
   if (r.dayId < baseDay) return false;
+  var m = c.market;
+  /* sanity band FIRST: a real daily move never halves or doubles
+     the rate; anything outside is a corrupted read (e.g. a bank
+     value). The day stamp below certifies this currency's rate as
+     current, so it must not be written for a read whose values
+     were just rejected — the old order stamped first and the
+     converter then printed today's date next to a stale rate. */
+  if (r.buy < m.buy * 0.5 || r.buy > m.buy * 2) return false;
   /* The source published on r.dayId: stamp it even when the values
      are unchanged, so the converter can tell this rate is current. */
   c.mDay = r.dayId;
   if (r.dayId > LATEST_DAY) LATEST_DAY = r.dayId;
-  var m = c.market;
-  /* sanity band: a real daily move never halves or doubles the rate;
-     anything outside is a corrupted read (e.g. a bank value), skip it */
-  if (r.buy < m.buy * 0.5 || r.buy > m.buy * 2) return false;
   var differs = Math.abs(m.buy - r.buy) >= 0.005 || Math.abs(m.sell - r.sell) >= 0.005;
   if (!differs && r.dayId === baseDay) return false;
   m.buy = round2(r.buy); m.sell = round2(r.sell);
@@ -329,12 +333,16 @@ function firstAggregate(urls){
     }
     urls.forEach(function(u, idx){
       fetchText(u, 15000, race ? race.signal : null).then(function(t){
-        var r = null;
+        var r = null, fromMd = false;
         try { r = extractCurrenciesJson(t); } catch (e) { r = null; }
         /* jina returns markdown, not the raw HTML: fall back to the
            markdown table parser (same shape, same threshold). */
-        if (!r){ try { r = parseAggMarkdown(t); } catch (e) { r = null; } }
-        if (r && r.list && r.list.length > 50) settle({ data: r, relay: idx });
+        if (!r){ try { r = parseAggMarkdown(t); fromMd = true; } catch (e) { r = null; } }
+        /* The JSON path needs the full list (>50), but the markdown
+           path carries at most the 24 visible-table currencies and
+           self-guards (>=20 entries, USD present) — requiring >50
+           of it too meant a good markdown parse could never settle. */
+        if (r && r.list && (r.list.length > 50 || (fromMd && r.list.length >= 20))) settle({ data: r, relay: idx });
         else if (--pending === 0) settle(null);
       }, function(){ if (--pending === 0) settle(null); });
     });

@@ -344,7 +344,7 @@ function createCard(c, rank){
   var buyTxt = noMarket ? "—" : fmtFx(dispVal(c, d, "buy"), c.code);
   var sellTxt = noMarket ? "—" : fmtFx(dispVal(c, d, "sell"), c.code);
   var spreadTxt = noMarket ? "ဘဏ်ဈေးသာ ရှိသည်"
-    : stateWord(s) + ' · ကွာဟချက် <span class="num">' + fmtFx((d.buy - d.sell) * liveFactor(c.code), c.code) + '</span> ကျပ်' + ((d.buy === d.sell) ? ' · <span class="single-note">ဝယ် = ရောင်း (တစ်ဈေးတည်း)</span>' : '');
+    : stateWord(s) + ' · ကွာဟချက် <span class="num">' + fmtFx(Math.abs(d.buy - d.sell) * liveFactor(c.code), c.code) + '</span> ကျပ်' + ((d.buy === d.sell) ? ' · <span class="single-note">ဝယ် = ရောင်း (တစ်ဈေးတည်း)</span>' : '');
   var btn = document.createElement("button");
   btn.className = "fx-card fade" + (c.code === selected ? " selected" : "");
   btn.setAttribute("aria-label", c.name + " " + c.code + " အသေးစိတ်ကြည့်ရန်");
