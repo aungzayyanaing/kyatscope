@@ -6,8 +6,8 @@ KyatScope is a static, single-page web app that shows foreign-exchange rates in 
 
 ## What it does
 
-- **Exchange rates for 103 currencies:** each currency shows a market buy price, a market sell price, and the daily change in percent. Some currencies are quoted per 100 or 1,000 units (for example, JPY per 100 and KRW and VND per 1,000); the page states the unit for each currency.
-- **Market and bank rates:** switch between market rates and bank rates. The rates table shows market buy/sell prices, the daily change, bank buy/sell prices, and the market-bank gap as a percentage. A few currencies are bank-only — for example, AED is shown as bank-only on the live site.
+- **Exchange rates for 103 currencies:: 38 currencies have market rates, each showing a market buy price, a market sell price, and the daily change in percent; the other 65 show bank rates only. Some currencies are quoted per 100 or 1,000 units (for example, JPY per 100 and KRW and VND per 1,000); the page states the unit for each currency.
+- **Market and bank rates:: switch between market rates and bank rates. The rates table shows market buy/sell prices, the daily change, bank buy/sell prices, and the market-bank gap as a percentage. 65 of the 103 currencies are bank-only — for example, AED is shown as bank-only on the live site.
 - **Rates ticker:** a scrolling ticker at the top of the page shows rates for the currencies, with a button to pause it.
 - **Top movers and most-used currencies:** the page highlights the five currencies with the largest daily rise and the currencies most commonly used in Myanmar, such as USD, THB, CNY, JPY, KRW, VND, SGD, MYR, EUR, GBP, and AUD.
 - **Search:** find a currency by name, code, or country name.
